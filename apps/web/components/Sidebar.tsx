@@ -17,19 +17,21 @@ import {
   Menu,
   LogOut,
   RefreshCw,
+  FolderTree,
 } from "lucide-react";
 import { clearSession, getSession, type DemoPersona } from "@/lib/session";
 
 const NAV = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
-  { href: "/regions", label: "Regions", icon: Map },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/projection", label: "Projection", icon: TrendingUp },
-  { href: "/callers", label: "Callers", icon: PhoneCall },
-  { href: "/operations", label: "Field Ops", icon: RefreshCw },
-  { href: "/conflicts", label: "Review queue", icon: AlertTriangle },
-  { href: "/upload", label: "Import list", icon: Upload },
-  { href: "/settings/team", label: "Team & roles", icon: Users },
+  { href: "/dashboard", label: "Overview", icon: LayoutDashboard, section: "Campaign" },
+  { href: "/regions", label: "Regions", icon: Map, section: "Campaign" },
+  { href: "/analytics", label: "Analytics", icon: BarChart3, section: "Campaign" },
+  { href: "/projection", label: "Projection", icon: TrendingUp, section: "Campaign" },
+  { href: "/directory", label: "Directory", icon: FolderTree, section: "Data" },
+  { href: "/callers", label: "Callers", icon: PhoneCall, section: "Data" },
+  { href: "/operations", label: "Field Ops", icon: RefreshCw, section: "Data" },
+  { href: "/conflicts", label: "Review queue", icon: AlertTriangle, section: "Data" },
+  { href: "/upload", label: "Import list", icon: Upload, section: "Manage" },
+  { href: "/settings/team", label: "Team & roles", icon: Users, section: "Manage" },
 ];
 
 export function Sidebar() {
@@ -85,22 +87,29 @@ export function Sidebar() {
         </div>
 
         <nav className="mt-2 flex-1 space-y-1 px-2">
-          {NAV.map((item) => {
+          {NAV.map((item, i) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;
+            const showHeader = !collapsed && item.section !== NAV[i - 1]?.section;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setMobileOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                  active ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-400 hover:bg-white/5 hover:text-white"
-                } ${collapsed ? "justify-center" : ""}`}
-                title={collapsed ? item.label : undefined}
-              >
-                <Icon size={18} />
-                {!collapsed && item.label}
-              </Link>
+              <div key={item.href}>
+                {showHeader && (
+                  <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                    {item.section}
+                  </div>
+                )}
+                <Link
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                    active ? "bg-primary text-primary-foreground shadow-sm" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  } ${collapsed ? "justify-center" : ""}`}
+                  title={collapsed ? item.label : undefined}
+                >
+                  <Icon size={18} />
+                  {!collapsed && item.label}
+                </Link>
+              </div>
             );
           })}
         </nav>

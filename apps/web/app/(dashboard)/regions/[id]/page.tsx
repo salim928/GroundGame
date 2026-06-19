@@ -5,6 +5,7 @@ import { data } from "@/lib/data";
 import { fmt, pct } from "@/lib/analytics";
 import { Card, ClassBadge, Kpi, PageHeader, Pill } from "@/components/primitives";
 import { SupportSpine } from "@/components/SupportSpine";
+import { BackButton } from "@/components/BackButton";
 
 const STATUS: Record<string, { tone: "green" | "amber" | "red"; label: string }> = {
   ok: { tone: "green", label: "On track" },
@@ -20,6 +21,7 @@ export default async function RegionPage({ params }: { params: Promise<{ id: str
 
   return (
     <>
+      <BackButton fallback="/regions" label="Back to Regions" />
       <PageHeader
         title={region.name}
         subtitle={`${region.code} · ${region.constituencies} constituencies`}

@@ -7,6 +7,7 @@ import { getRealDelegates } from "@/lib/delegates.server";
 import { Card, ClassBadge, Kpi, PageHeader, Pill } from "@/components/primitives";
 import { SupportSpine } from "@/components/SupportSpine";
 import { DelegateRoster } from "@/components/DelegateRoster";
+import { BackButton } from "@/components/BackButton";
 
 const OUTCOME_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   supportive: "green",
@@ -32,6 +33,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
 
   return (
     <>
+      <BackButton fallback={`/regions/${c.regionId}`} label={regionName ? `Back to ${regionName}` : "Back"} />
       <PageHeader
         title={c.name}
         subtitle={`${c.code} · target ${c.targetContacts} active contacts`}
