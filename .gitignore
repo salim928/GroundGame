@@ -20,3 +20,4 @@ GroundGame_Build_Spec.docx
 # Real delegate conference data (PII) — never commit; only the derived public
 # region/constituency hierarchy (apps/web/lib/hierarchy.ts) is checked in.
 constituency conference/
+apps/web/lib/delegates.local.json

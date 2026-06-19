@@ -2,8 +2,11 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, Phone, Star } from "lucide-react";
 import { data } from "@/lib/data";
 import { fmt, pct } from "@/lib/analytics";
+import { REAL_HIERARCHY } from "@/lib/hierarchy";
+import { getRealDelegates } from "@/lib/delegates.server";
 import { Card, ClassBadge, Kpi, PageHeader, Pill } from "@/components/primitives";
 import { SupportSpine } from "@/components/SupportSpine";
+import { DelegateRoster } from "@/components/DelegateRoster";
 
 const OUTCOME_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
   supportive: "green",
@@ -24,6 +27,8 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
   if (!payload) notFound();
   const { constituency: c, branches, callbacks, callers, delegates } = payload;
   const reachedPct = c.kpis.delegates ? c.kpis.reached / c.kpis.delegates : 0;
+  const regionName = REAL_HIERARCHY.find((r) => `r-${r.code}` === c.regionId)?.name ?? "";
+  const realDelegates = getRealDelegates(regionName, c.name);
 
   return (
     <>
@@ -129,6 +134,13 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
         )}
       </Card>
 
+      {realDelegates.length > 0 && (
+        <div className="mt-4">
+          <DelegateRoster constituency={c.name} initial={realDelegates} />
+        </div>
+      )}
+
+      {realDelegates.length === 0 && (
       <Card className="mt-4">
         <h2 className="mb-3 font-semibold text-ink">Delegates</h2>
         <div className="overflow-x-auto">
@@ -182,6 +194,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
           </table>
         </div>
       </Card>
+      )}
     </>
   );
 }
