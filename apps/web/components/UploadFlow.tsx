@@ -7,13 +7,13 @@ import { Card } from "@/components/primitives";
 
 // Mock parse result — the real flow POSTs to /uploads/delegates for a server-side preview (Section 12).
 const SAMPLE_PREVIEW: UploadPreview = {
-  regions: 5,
-  constituencies: 34,
-  branches: 198,
-  delegates: 372,
-  duplicates: 4,
-  newDelegates: 358,
-  updatedDelegates: 14,
+  regions: 16,
+  constituencies: 233,
+  branches: 1164,
+  delegates: 2330,
+  duplicates: 6,
+  newDelegates: 2298,
+  updatedDelegates: 32,
 };
 
 export function UploadFlow() {

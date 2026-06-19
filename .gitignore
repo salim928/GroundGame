@@ -16,3 +16,7 @@ coverage/
 # Confidential source spec — kept out of the repo (marked Internal Campaign Use)
 GG.pdf
 GroundGame_Build_Spec.docx
+
+# Real delegate conference data (PII) — never commit; only the derived public
+# region/constituency hierarchy (apps/web/lib/hierarchy.ts) is checked in.
+constituency conference/

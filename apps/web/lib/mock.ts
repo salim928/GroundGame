@@ -1,6 +1,7 @@
 // Typed mock data layer — shaped to the API contract so every screen is viewable
 // before the NestJS backend is wired (Build Spec: "wire the prototype to real data").
 import { addSpines, classify, projectShare, spineTotal } from "./analytics";
+import { REAL_HIERARCHY } from "./hierarchy";
 import type {
   Alert,
   AnalyticsPayload,
@@ -27,13 +28,10 @@ function rng(seed: number) {
   return () => (s = (s * 16807) % 2147483647) / 2147483647;
 }
 
-const REGIONS = [
-  { name: "Greater Accra", code: "GAR", constituencies: 8 },
-  { name: "Ashanti", code: "ASH", constituencies: 10 },
-  { name: "Northern", code: "NOR", constituencies: 6 },
-  { name: "Western", code: "WES", constituencies: 5 },
-  { name: "Volta", code: "VOL", constituencies: 5 },
-];
+// Real Ghana NDC region → constituency hierarchy (derived from the constituency
+// conference dataset). 16 regions, 233 constituencies. Call metrics are synthesised
+// on top of these real names until the live API is connected.
+const REGIONS = REAL_HIERARCHY;
 
 const BRANCH_NAMES = ["Central", "North", "South", "East", "West", "New Town", "Market", "Zongo"];
 
@@ -68,7 +66,7 @@ function buildConstituencies(): { byRegion: Record<string, MockConstituency[]>; 
   for (const region of REGIONS) {
     const rid = `r-${region.code}`;
     byRegion[rid] = [];
-    for (let i = 0; i < region.constituencies; i++) {
+    region.constituencies.forEach((con, i) => {
       n++;
       const rand = rng(n * 97 + 13);
       const total = 8 + Math.floor(rand() * 6); // ~10 contacts/constituency target
@@ -76,10 +74,10 @@ function buildConstituencies(): { byRegion: Record<string, MockConstituency[]>; 
       const kpis = kpisFromSpine(spine);
       const callers = Math.floor(rand() * 5);
       const c: MockConstituency = {
-        id: `c-${region.code}-${i + 1}`,
+        id: `c-${con.code}`,
         regionId: rid,
-        name: `${region.name} ${i + 1}`,
-        code: `${region.code}${String(i + 1).padStart(2, "0")}`,
+        name: con.name,
+        code: con.code,
         kpis,
         spine,
         callersAssigned: callers,
@@ -89,7 +87,7 @@ function buildConstituencies(): { byRegion: Record<string, MockConstituency[]>; 
       };
       byRegion[rid].push(c);
       all.push(c);
-    }
+    });
   }
   return { byRegion, all };
 }
