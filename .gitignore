@@ -1,0 +1,18 @@
+node_modules/
+.next/
+dist/
+out/
+build/
+.env
+.env.local
+.env*.local
+*.log
+.DS_Store
+.turbo/
+coverage/
+*.tsbuildinfo
+.vercel/
+
+# Confidential source spec — kept out of the repo (marked Internal Campaign Use)
+GG.pdf
+GroundGame_Build_Spec.docx

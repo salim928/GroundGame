@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* shadcn/ui design tokens (HSL). Neutral slate base with NDC-green primary. */
+@layer base {
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 32% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 222 32% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 32% 12%;
+
+    /* NDC green brand scale — single source of truth for every green in the app. */
+    --brand-50: 145 60% 96%;
+    --brand-100: 146 55% 88%;
+    --brand-400: 146 64% 42%;
+    --brand-500: 147 78% 33%;
+    --brand-600: 143 85% 26%; /* #0A7D34 — primary NDC green */
+    --brand-700: 144 88% 21%;
+    --brand-800: 146 84% 15%;
+    --brand-900: 150 80% 11%;
+
+    /* Primary = NDC green */
+    --primary: var(--brand-600);
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 32% 18%;
+
+    --muted: 214 32% 95%;
+    --muted-foreground: 215 16% 47%;
+
+    --accent: 226 70% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 4 70% 53%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 28% 90%;
+    --input: 214 28% 90%;
+    --ring: var(--brand-600);
+
+    --radius: 0.75rem;
+
+    /* Brand + support spine — supportive shares the NDC green hue */
+    --ink: 215 38% 12%;
+    --support-supportive: 147 72% 36%;
+    --support-undecided: 40 73% 52%;
+    --support-opposed: 5 66% 54%;
+    --support-notreached: 218 17% 71%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv01", "cv02", "ss01";
+  }
+}
+
+/* Tabular numerals for all figures (campaign metrics). */
+.tnum {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  letter-spacing: -0.01em;
+}
+
+.kpi-label {
+  @apply text-[11px] font-medium uppercase tracking-wider text-muted-foreground;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: hsl(214 20% 82%);
+  border-radius: 8px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(214 20% 72%);
+}

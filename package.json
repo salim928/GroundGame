@@ -1,0 +1,24 @@
+{
+  "name": "groundgame",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GroundGame — Delegate Mobilization & Call-Tracking Platform",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "dev:web": "npm run dev --workspace apps/web",
+    "dev:api": "npm run start:dev --workspace apps/api",
+    "build": "npm run build --workspace apps/web && npm run build --workspace apps/api",
+    "build:web": "npm run build --workspace apps/web"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "comment": "overrides collapse the tree to a single React 19 copy (Next 16 requires it); avoids dual-React 'Objects are not valid as a React child'.",
+  "overrides": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  }
+}
