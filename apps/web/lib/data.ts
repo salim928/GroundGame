@@ -18,7 +18,14 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK !== "false" || !API_BASE;
 
 async function apiGet<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+  const headers: Record<string, string> = {};
+  // Attach the Supabase JWT for the NestJS guards when running in the browser.
+  if (typeof window !== "undefined") {
+    const { getAccessToken } = await import("./supabase");
+    const token = await getAccessToken();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", headers });
   if (!res.ok) throw new Error(`API ${path} -> ${res.status}`);
   return res.json() as Promise<T>;
 }
