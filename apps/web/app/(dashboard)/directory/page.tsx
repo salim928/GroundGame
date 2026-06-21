@@ -1,11 +1,12 @@
 import { REAL_HIERARCHY } from "@/lib/hierarchy";
-import { getRosterCounts, rosterKey, rosterStats } from "@/lib/delegates.server";
+import { getRosterCounts, rosterKey } from "@/lib/delegates.server";
+import { getViewerScope, scopeHierarchy } from "@/lib/scope.server";
 import { PageHeader } from "@/components/primitives";
 import { DirectoryBrowser } from "@/components/DirectoryBrowser";
 
 export default async function DirectoryPage() {
-  const counts = await getRosterCounts();
-  const regions = REAL_HIERARCHY.map((r) => ({
+  const [counts, scope] = await Promise.all([getRosterCounts(), getViewerScope()]);
+  const regions = scopeHierarchy(REAL_HIERARCHY, scope).map((r) => ({
     name: r.name,
     code: r.code,
     constituencies: r.constituencies.map((c) => ({
@@ -15,7 +16,14 @@ export default async function DirectoryPage() {
       delegates: counts[rosterKey(r.name, c.name)] ?? 0,
     })),
   }));
-  const stats = await rosterStats();
+  const stats = regions.reduce(
+    (acc, r) => {
+      acc.constituencies += r.constituencies.length;
+      acc.delegates += r.constituencies.reduce((s, c) => s + c.delegates, 0);
+      return acc;
+    },
+    { constituencies: 0, delegates: 0 },
+  );
 
   return (
     <>

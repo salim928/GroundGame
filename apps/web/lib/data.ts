@@ -14,5 +14,3 @@ export const data = {
   members: () => real.members(),
   syncOverview: () => real.syncOverview(),
 };
-
-export const usingMock = false;

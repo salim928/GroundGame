@@ -59,7 +59,7 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
     // Resolve the user's real role + scope from their profile.
     const { data: profile } = await supa
       .from("profiles")
-      .select("role, full_name, regions(name), constituencies(name)")
+      .select("role, full_name, regions(name,code), constituencies(name,code)")
       .eq("user_id", data.user.id)
       .single();
 
@@ -77,6 +77,8 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
 
     const region = (profile as any)?.regions?.name as string | undefined;
     const constituency = (profile as any)?.constituencies?.name as string | undefined;
+    const regionCode = (profile as any)?.regions?.code as string | undefined;
+    const conCode = (profile as any)?.constituencies?.code as string | undefined;
     const scope = constituency
       ? `${region ?? ""} · ${constituency}`
       : region ?? (role === "super_admin" ? "National" : "National (read-only)");
@@ -88,6 +90,8 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
       roleLabel: ROLE_LABEL[role],
       scope,
       email: email.trim(),
+      regionCode: regionCode ?? null,
+      conCode: conCode ?? null,
     });
     router.push(ROLE_HOME[role]);
   }

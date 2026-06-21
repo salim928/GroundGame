@@ -12,6 +12,7 @@ import {
   type CallStat,
 } from "./delegates.server";
 import { addSpines, classify, projectShare } from "./analytics";
+import { getViewerScope, scopeHierarchy } from "./scope.server";
 import type {
   Classification,
   AnalyticsPayload,
@@ -57,8 +58,8 @@ function aggregate(items: { kpis: Kpis; spine: Spine }[]): { kpis: Kpis; spine: 
 }
 
 async function build() {
-  const [counts, stats] = await Promise.all([getRosterCounts(), getCallStats()]);
-  const regions = REAL_HIERARCHY.map((r) => {
+  const [counts, stats, scope] = await Promise.all([getRosterCounts(), getCallStats(), getViewerScope()]);
+  const regions = scopeHierarchy(REAL_HIERARCHY, scope).map((r) => {
     const constituencies: ConstituencyRollup[] = r.constituencies.map((c) => {
       const key = rosterKey(r.name, c.name);
       const delegates = counts[key] ?? 0;

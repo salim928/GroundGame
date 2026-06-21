@@ -27,7 +27,9 @@ export function FieldOps({ sync }: { sync: SyncHealth }) {
           <dt className="flex items-center gap-2 text-muted-foreground">
             <Clock size={14} /> Last sync
           </dt>
-          <dd className="tnum font-medium text-foreground">{sync.lastSyncMins}m ago</dd>
+          <dd className="tnum font-medium text-foreground">
+            {sync.lastSyncMins >= 0 ? `${sync.lastSyncMins}m ago` : "Not synced yet"}
+          </dd>
         </div>
         <div className="flex items-center justify-between">
           <dt className="text-muted-foreground">Sheets synced</dt>

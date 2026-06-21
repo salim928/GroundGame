@@ -8,13 +8,13 @@ import { data } from "@/lib/data";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const conflicts = await data.conflicts();
+  const [conflicts, sync] = await Promise.all([data.conflicts(), data.syncOverview()]);
 
   return (
     <div className="flex min-h-screen flex-col md:flex-row">
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col">
-        <TopBar conflictsCount={conflicts.length} lastSyncMins={4} />
+        <TopBar conflictsCount={conflicts.length} lastSyncMins={sync.lastSyncMins} />
         <div className="mx-auto w-full max-w-7xl px-4 py-7 md:px-6">
           <RequireAuth>{children}</RequireAuth>
         </div>

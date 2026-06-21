@@ -27,10 +27,16 @@ export function TopBar({ conflictsCount, lastSyncMins }: { conflictsCount: numbe
       </div>
 
       <div className="ml-auto flex items-center gap-2">
-        {/* Live sync status */}
-        <span className="hidden items-center gap-1.5 rounded-full border border-brand-100 bg-brand-50 px-2.5 py-1 text-xs font-medium text-brand-700 sm:inline-flex">
-          <RefreshCw size={12} className="text-brand-600" />
-          Synced {lastSyncMins}m ago
+        {/* Sync status */}
+        <span
+          className={`hidden items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium sm:inline-flex ${
+            lastSyncMins >= 0
+              ? "border-brand-100 bg-brand-50 text-brand-700"
+              : "border-border bg-muted text-muted-foreground"
+          }`}
+        >
+          <RefreshCw size={12} className={lastSyncMins >= 0 ? "text-brand-600" : "text-muted-foreground"} />
+          {lastSyncMins >= 0 ? `Synced ${lastSyncMins}m ago` : "Not synced yet"}
         </span>
 
         {/* Conflicts */}
