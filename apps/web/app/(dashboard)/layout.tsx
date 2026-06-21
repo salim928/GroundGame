@@ -4,6 +4,10 @@ import { RequireAuth } from "@/components/RequireAuth";
 import { data, usingMock } from "@/lib/data";
 import { rosterStats } from "@/lib/delegates.server";
 
+// Dashboard pages depend on runtime env + Supabase, so render per request
+// (not statically baked at build time).
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const conflicts = await data.conflicts();
   const roster = await rosterStats();

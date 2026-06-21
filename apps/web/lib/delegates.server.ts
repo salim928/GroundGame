@@ -54,6 +54,7 @@ async function fromSupabase(): Promise<Store | null> {
 
 // --- source 2: local gitignored file (local dev only) -------------------------
 function fromFile(): Store | null {
+  if (process.env.VERCEL) return null; // the file is never deployed; use Supabase
   const cwd = process.cwd();
   const candidates = [
     path.join(cwd, "lib", "delegates.local.json"),
@@ -71,7 +72,18 @@ function fromFile(): Store | null {
 }
 
 function getStore(): Promise<Store> {
-  if (!cache) cache = (async () => (await fromSupabase()) ?? fromFile() ?? {})();
+  if (!cache) {
+    cache = (async () => (await fromSupabase()) ?? fromFile() ?? {})();
+    // Don't cache an empty result, so seeding Supabase later is picked up
+    // without a redeploy.
+    cache
+      .then((s) => {
+        if (Object.keys(s).length === 0) cache = undefined;
+      })
+      .catch(() => {
+        cache = undefined;
+      });
+  }
   return cache;
 }
 
