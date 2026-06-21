@@ -6,7 +6,6 @@ import { useEffect, useState } from "react";
 import {
   LayoutDashboard,
   Map,
-  TrendingUp,
   BarChart3,
   PhoneCall,
   AlertTriangle,
@@ -26,7 +25,6 @@ const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, section: "Campaign" },
   { href: "/regions", label: "Regions", icon: Map, section: "Campaign" },
   { href: "/analytics", label: "Analytics", icon: BarChart3, section: "Campaign" },
-  { href: "/projection", label: "Projection", icon: TrendingUp, section: "Campaign" },
   { href: "/directory", label: "Directory", icon: FolderTree, section: "Data" },
   { href: "/callers", label: "Callers", icon: PhoneCall, section: "Data" },
   { href: "/operations", label: "Field Ops", icon: RefreshCw, section: "Data" },

@@ -44,7 +44,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
         <Kpi label="Delegates" value={fmt(c.kpis.delegates)} />
         <Kpi label="Coverage" value={pct(c.kpis.coverage)} sub={`${fmt(c.kpis.called)} called`} />
         <Kpi label="Reached" value={pct(reachedPct)} sub={`${fmt(c.kpis.reached)} delegates`} />
-        <Kpi label="Projected support" value={pct(c.kpis.projectedSupport)} />
+        <Kpi label="Supportive" value={fmt(c.spine.supportive)} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">

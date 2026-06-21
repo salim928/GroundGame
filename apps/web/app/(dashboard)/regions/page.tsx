@@ -34,8 +34,8 @@ export default async function RegionsPage() {
                   <div className="kpi-label">Coverage</div>
                 </div>
                 <div>
-                  <div className="tnum text-lg font-semibold text-ink">{pct(r.kpis.projectedSupport)}</div>
-                  <div className="kpi-label">Projected</div>
+                  <div className="tnum text-lg font-semibold text-ink">{fmt(r.kpis.reached)}</div>
+                  <div className="kpi-label">Reached</div>
                 </div>
               </div>
               <div className="mt-4">

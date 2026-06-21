@@ -55,12 +55,11 @@ export function FunnelBars({ data }: { data: FunnelStage[] }) {
   );
 }
 
-/** Coverage vs projected support per region. */
+/** Call coverage per region. */
 export function RegionBars({ data }: { data: RegionComparison[] }) {
   const rows = data.map((r) => ({
     name: r.code,
     Coverage: Math.round(r.coverage * 100),
-    Projected: Math.round(r.projected * 100),
   }));
   return (
     <ResponsiveContainer width="100%" height={260}>
@@ -69,8 +68,7 @@ export function RegionBars({ data }: { data: RegionComparison[] }) {
         <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} tickLine={false} axisLine={false} unit="%" />
         <Tooltip contentStyle={tooltipStyle} formatter={(v) => `${v}%`} />
         <Legend wrapperStyle={{ fontSize: 12 }} />
-        <Bar dataKey="Coverage" fill="#B2BAC8" radius={[3, 3, 0, 0]} />
-        <Bar dataKey="Projected" fill={BRAND.green600} radius={[3, 3, 0, 0]} />
+        <Bar dataKey="Coverage" fill={BRAND.green600} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

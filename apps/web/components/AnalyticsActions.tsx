@@ -20,14 +20,12 @@ export function AnalyticsActions({
         Name: r.name,
         Delegates: r.delegates,
         Coverage: pct(r.coverage),
-        Projected: pct(r.projected),
       })),
       ...priority.map((p) => ({
         Type: "Priority constituency",
         Name: p.name,
         Delegates: p.delegates,
         Coverage: pct(p.coverage),
-        Projected: pct(p.projected),
       })),
     ];
     downloadCsv("groundgame-analytics", rows);

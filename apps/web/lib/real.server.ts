@@ -23,7 +23,6 @@ import type {
   Kpis,
   Member,
   OverviewPayload,
-  ProjectionPayload,
   RegionPayload,
   RegionRollup,
   SegmentEngagement,
@@ -41,10 +40,10 @@ function spineFrom(delegates: number, st: CallStat | undefined): Spine {
   const opposed = st?.opposed ?? 0;
   return { supportive, undecided, opposed, notReached: Math.max(0, delegates - supportive - undecided - opposed) };
 }
-function kpisFrom(delegates: number, st: CallStat | undefined, spine: Spine): Kpis {
+function kpisFrom(delegates: number, st: CallStat | undefined): Kpis {
   const called = st?.called ?? 0;
   const reached = st?.reached ?? 0;
-  return { delegates, called, reached, coverage: delegates ? called / delegates : 0, projectedSupport: projectShare(spine) };
+  return { delegates, called, reached, coverage: delegates ? called / delegates : 0 };
 }
 function classFrom(spine: Spine, reached: number): Classification {
   return reached === 0 ? "unrated" : classify(projectShare(spine));
@@ -54,7 +53,7 @@ function aggregate(items: { kpis: Kpis; spine: Spine }[]): { kpis: Kpis; spine: 
   const delegates = items.reduce((s, i) => s + i.kpis.delegates, 0);
   const called = items.reduce((s, i) => s + i.kpis.called, 0);
   const reached = items.reduce((s, i) => s + i.kpis.reached, 0);
-  return { spine, kpis: { delegates, called, reached, coverage: delegates ? called / delegates : 0, projectedSupport: projectShare(spine) } };
+  return { spine, kpis: { delegates, called, reached, coverage: delegates ? called / delegates : 0 } };
 }
 
 async function build() {
@@ -65,7 +64,7 @@ async function build() {
       const delegates = counts[key] ?? 0;
       const st = stats[key];
       const spine = spineFrom(delegates, st);
-      const kpis = kpisFrom(delegates, st, spine);
+      const kpis = kpisFrom(delegates, st);
       return {
         id: `c-${c.code}`,
         regionId: `r-${r.code}`,
@@ -186,19 +185,6 @@ export async function constituency(id: string): Promise<ConstituencyPayload | nu
   return { constituency: rollup, spine: rollup.spine, branches: [], callbacks: [], callers: [], delegates };
 }
 
-export async function projection(): Promise<ProjectionPayload> {
-  const regs = await build();
-  const national = aggregate(regs.flatMap((r) => r.constituencies));
-  const headline = national.kpis.projectedSupport;
-  const band = headline > 0 ? 0.05 : 0;
-  return {
-    spine: national.spine,
-    weights: { supportive: 1.0, undecided: 0.35, not_reached: 0.15, opposed: 0.0 },
-    headline,
-    confidenceBand: [Math.max(0, headline - band), Math.min(1, headline + band)],
-  };
-}
-
 export async function analytics(): Promise<AnalyticsPayload> {
   const regs = await build();
   const cons = regs.flatMap((r) => r.constituencies);
@@ -211,7 +197,6 @@ export async function analytics(): Promise<AnalyticsPayload> {
       region: regs.find((r) => r.rollup.id === c.regionId)?.rollup.name ?? "",
       delegates: c.kpis.delegates,
       coverage: c.kpis.coverage,
-      projected: c.kpis.projectedSupport,
       gap: Math.round(c.kpis.delegates * (1 - c.kpis.coverage)),
       classification: c.classification,
     }))
@@ -235,7 +220,7 @@ export async function analytics(): Promise<AnalyticsPayload> {
       { stage: "Reached", value: national.kpis.reached },
       { stage: "Supportive", value: national.spine.supportive },
     ],
-    regions: regs.map((r) => ({ name: r.rollup.name, code: r.rollup.code, coverage: r.rollup.kpis.coverage, projected: r.rollup.kpis.projectedSupport, delegates: r.rollup.kpis.delegates })),
+    regions: regs.map((r) => ({ name: r.rollup.name, code: r.rollup.code, coverage: r.rollup.kpis.coverage, delegates: r.rollup.kpis.delegates })),
     classDistribution,
     priority,
     segments: await segments(),

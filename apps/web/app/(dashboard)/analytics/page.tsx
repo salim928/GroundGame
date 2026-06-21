@@ -14,7 +14,7 @@ export default async function AnalyticsPage() {
     <>
       <PageHeader
         title="Analytics & Reports"
-        subtitle="Coverage, support funnel, projection and priority ranking across the campaign"
+        subtitle="Coverage, support funnel and priority ranking across the campaign"
         action={<AnalyticsActions regions={a.regions} priority={a.priority} />}
       />
 
@@ -43,7 +43,7 @@ export default async function AnalyticsPage() {
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
-          <h2 className="mb-3 font-semibold text-ink">Coverage vs projected support by region</h2>
+          <h2 className="mb-3 font-semibold text-ink">Coverage by region</h2>
           <RegionBars data={a.regions} />
         </Card>
         <Card>
@@ -58,7 +58,7 @@ export default async function AnalyticsPage() {
           <h2 className="font-semibold text-ink">Priority ranking</h2>
         </div>
         <p className="mb-3 text-sm text-slate-500">
-          High-delegate, low-coverage constituencies first — where field effort moves the projection most.
+          High-delegate, low-coverage constituencies first — where field effort matters most.
         </p>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -69,7 +69,6 @@ export default async function AnalyticsPage() {
                 <th className="py-2 font-medium">Region</th>
                 <th className="py-2 font-medium">Delegates</th>
                 <th className="py-2 font-medium">Coverage</th>
-                <th className="py-2 font-medium">Projected</th>
                 <th className="py-2 font-medium">Priority gap</th>
                 <th className="py-2 font-medium">Class</th>
               </tr>
@@ -82,7 +81,6 @@ export default async function AnalyticsPage() {
                   <td className="py-2.5 text-slate-500">{c.region}</td>
                   <td className="tnum py-2.5 text-slate-600">{c.delegates}</td>
                   <td className="tnum py-2.5 text-slate-600">{pct(c.coverage)}</td>
-                  <td className="tnum py-2.5 font-medium text-ink">{pct(c.projected)}</td>
                   <td className="py-2.5">
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">

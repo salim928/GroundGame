@@ -7,7 +7,6 @@ export const data = {
   regions: () => real.regions(),
   region: (id: string) => real.region(id),
   constituency: (id: string) => real.constituency(id),
-  projection: () => real.projection(),
   analytics: () => real.analytics(),
   callers: () => real.callers(),
   conflicts: () => real.conflicts(),

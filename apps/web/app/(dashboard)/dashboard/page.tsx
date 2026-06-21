@@ -36,13 +36,7 @@ export default async function OverviewPage() {
           sub={pct(o.kpis.reached / o.kpis.delegates) + " of delegates"}
           delta={o.trends.reached}
         />
-        <Kpi
-          label="Projected support"
-          value={pct(o.kpis.projectedSupport)}
-          sub="weighted projection"
-          delta={o.trends.support}
-          accent
-        />
+        <Kpi label="Supportive" value={fmt(o.spine.supportive)} sub="reached & supportive" accent />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -103,7 +97,6 @@ export default async function OverviewPage() {
                 <th className="py-2 font-medium">Region</th>
                 <th className="py-2 font-medium">Constit.</th>
                 <th className="py-2 font-medium">Coverage</th>
-                <th className="py-2 font-medium">Projected</th>
                 <th className="py-2 font-medium">Class</th>
                 <th className="w-56 py-2 font-medium">Support spine</th>
               </tr>
@@ -118,7 +111,6 @@ export default async function OverviewPage() {
                   </td>
                   <td className="tnum py-2.5 text-muted-foreground">{r.constituencies}</td>
                   <td className="tnum py-2.5 text-muted-foreground">{pct(r.kpis.coverage)}</td>
-                  <td className="tnum py-2.5 font-medium text-foreground">{pct(r.kpis.projectedSupport)}</td>
                   <td className="py-2.5"><ClassBadge value={r.classification} /></td>
                   <td className="py-2.5"><SupportSpine spine={r.spine} /></td>
                 </tr>

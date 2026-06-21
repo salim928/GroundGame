@@ -32,7 +32,7 @@ export default async function RegionPage({ params }: { params: Promise<{ id: str
         <Kpi label="Delegates" value={fmt(region.kpis.delegates)} />
         <Kpi label="Coverage" value={pct(region.kpis.coverage)} sub={`${fmt(region.kpis.called)} called`} />
         <Kpi label="Reached" value={fmt(region.kpis.reached)} />
-        <Kpi label="Projected support" value={pct(region.kpis.projectedSupport)} />
+        <Kpi label="Supportive" value={fmt(region.spine.supportive)} />
       </div>
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -63,7 +63,6 @@ export default async function RegionPage({ params }: { params: Promise<{ id: str
                 <th className="py-2 font-medium">Status</th>
                 <th className="py-2 font-medium">Coverage</th>
                 <th className="py-2 font-medium">Callers / target</th>
-                <th className="py-2 font-medium">Projected</th>
                 <th className="py-2 font-medium">Class</th>
                 <th className="w-48 py-2 font-medium">Spine</th>
               </tr>
@@ -89,7 +88,6 @@ export default async function RegionPage({ params }: { params: Promise<{ id: str
                     <td className="tnum py-2.5 text-slate-600">
                       {c.callersAssigned} / {c.targetContacts}
                     </td>
-                    <td className="tnum py-2.5 font-medium text-ink">{pct(c.kpis.projectedSupport)}</td>
                     <td className="py-2.5"><ClassBadge value={c.classification} /></td>
                     <td className="py-2.5"><SupportSpine spine={c.spine} /></td>
                   </tr>

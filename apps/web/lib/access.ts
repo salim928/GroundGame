@@ -38,7 +38,6 @@ const STAFF_VIEW = [
   "/dashboard",
   "/regions",
   "/analytics",
-  "/projection",
   "/directory",
   "/callers",
   "/operations",

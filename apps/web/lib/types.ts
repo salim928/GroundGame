@@ -23,8 +23,6 @@ export interface Kpis {
   delegates: number;
   called: number;
   reached: number;
-  /** Weighted projected support share (0–1). */
-  projectedSupport: number;
   /** called / delegates (0–1). */
   coverage: number;
 }
@@ -164,18 +162,12 @@ export interface ConstituencyPayload {
   delegates: DelegateRow[];
 }
 
+// Weights used internally to classify constituencies once calls exist (not surfaced as a metric).
 export interface ProjectionWeights {
   supportive: number;
   undecided: number;
   not_reached: number;
   opposed: number;
-}
-
-export interface ProjectionPayload {
-  spine: Spine;
-  weights: ProjectionWeights;
-  headline: number; // current projected support share (0–1)
-  confidenceBand: [number, number];
 }
 
 export interface CallerPerf {
@@ -217,7 +209,6 @@ export interface RegionComparison {
   name: string;
   code: string;
   coverage: number; // 0–1
-  projected: number; // 0–1
   delegates: number;
 }
 
@@ -232,7 +223,6 @@ export interface PriorityConstituency {
   region: string;
   delegates: number;
   coverage: number;
-  projected: number;
   gap: number; // priority score: high delegates + low coverage
   classification: Classification;
 }
