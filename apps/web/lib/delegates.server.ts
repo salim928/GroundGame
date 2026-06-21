@@ -18,7 +18,8 @@ const keyOf = (region: string, constituency: string) => `${region}::${constituen
 
 // --- source 1: Supabase (preferred — available on the deployed app) -----------
 async function fromSupabase(): Promise<Store | null> {
-  const url = process.env.SUPABASE_URL;
+  // URL falls back to the public one, so deploys only need the service-role secret.
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
   try {
