@@ -97,6 +97,11 @@ export async function getRosterCounts(): Promise<Record<string, number>> {
   return Object.fromEntries(Object.entries(store).map(([k, v]) => [k, v.delegates.length]));
 }
 
+export async function getAllDelegates(): Promise<RealDelegate[]> {
+  const store = await getStore();
+  return Object.values(store).flatMap((v) => v.delegates);
+}
+
 export async function rosterStats(): Promise<{ constituencies: number; delegates: number }> {
   const store = await getStore();
   const vals = Object.values(store);

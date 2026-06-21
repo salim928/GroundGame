@@ -1,0 +1,230 @@
+// Real data layer — computes every dashboard payload from the actual delegate
+// roster (Supabase/file) and hierarchy. No synthesized/mock numbers. Call-activity
+// metrics are zero until the field operation ticks sheets and the sync fills
+// call_records; they then populate here. Server-only.
+import { REAL_HIERARCHY } from "./hierarchy";
+import { getAllDelegates, getRealDelegates, getRosterCounts, rosterKey } from "./delegates.server";
+import type {
+  AnalyticsPayload,
+  CallerPerf,
+  Conflict,
+  ConstituencyPayload,
+  ConstituencyRollup,
+  Kpis,
+  Member,
+  OverviewPayload,
+  ProjectionPayload,
+  RegionPayload,
+  RegionRollup,
+  SegmentEngagement,
+  Spine,
+  SyncOverview,
+} from "./types";
+
+const TARGET = 10;
+
+function zeroKpis(delegates: number): Kpis {
+  return { delegates, called: 0, reached: 0, coverage: 0, projectedSupport: 0 };
+}
+function zeroSpine(delegates: number): Spine {
+  return { supportive: 0, undecided: 0, opposed: 0, notReached: delegates };
+}
+
+async function build() {
+  const counts = await getRosterCounts();
+  const regions = REAL_HIERARCHY.map((r) => {
+    const constituencies: ConstituencyRollup[] = r.constituencies.map((c) => {
+      const delegates = counts[rosterKey(r.name, c.name)] ?? 0;
+      return {
+        id: `c-${c.code}`,
+        regionId: `r-${r.code}`,
+        name: c.name,
+        code: c.code,
+        kpis: zeroKpis(delegates),
+        spine: zeroSpine(delegates),
+        callersAssigned: 0,
+        targetContacts: TARGET,
+        classification: "unrated" as const,
+        status: delegates > 0 ? ("ok" as const) : ("no_callers" as const),
+      };
+    });
+    const delegates = constituencies.reduce((s, c) => s + c.kpis.delegates, 0);
+    const rollup: RegionRollup = {
+      id: `r-${r.code}`,
+      name: r.name,
+      code: r.code,
+      kpis: zeroKpis(delegates),
+      spine: zeroSpine(delegates),
+      constituencies: r.constituencies.length,
+      classification: "unrated",
+    };
+    return { rollup, constituencies };
+  });
+  return regions;
+}
+
+async function segments(): Promise<SegmentEngagement[]> {
+  const all = await getAllDelegates();
+  const group = (re: RegExp) => all.filter((d) => re.test(d.position)).length;
+  return [
+    { segment: "current_exec", label: "Chairmen & Vice", total: group(/chair/i), reached: 0 },
+    { segment: "former_exec", label: "Secretaries", total: group(/secretary/i), reached: 0 },
+    { segment: "aspiring_exec", label: "Organizers", total: group(/organi/i), reached: 0 },
+    { segment: "influencer", label: "Treasurers & Comms", total: group(/treasurer|communication/i), reached: 0 },
+  ];
+}
+
+export async function overview(): Promise<OverviewPayload> {
+  const regions = await build();
+  const delegates = regions.reduce((s, r) => s + r.rollup.kpis.delegates, 0);
+  const withRoster = regions.flatMap((r) => r.constituencies).filter((c) => c.kpis.delegates > 0).length;
+  const totalCons = regions.reduce((s, r) => s + r.constituencies.length, 0);
+  const noRoster = totalCons - withRoster;
+
+  return {
+    kpis: zeroKpis(delegates),
+    spine: zeroSpine(delegates),
+    dailyReached: [],
+    alerts: [
+      { id: "calls", kind: "stale_data", severity: "info", message: "Field calls not started — call metrics populate as callers tick sheets", scope: "National" },
+      ...(noRoster > 0
+        ? [{ id: "roster", kind: "no_callers" as const, severity: "warn" as const, message: `${noRoster} constituencies have no roster loaded yet`, scope: "National" }]
+        : []),
+    ],
+    regions: regions.map((r) => r.rollup),
+    segments: await segments(),
+    syncHealth: { lastSyncMins: -1, sheetsSynced: 0, sheetsTotal: totalCons, conflictsOpen: 0, staleSheets: 0 },
+    paceToTarget: { reachedToTarget: 0, target: delegates, daysLeft: 21, reachedPerDay: 0, requiredPerDay: Math.ceil(delegates / 21), onPace: false },
+    trends: { coverage: 0, reached: 0, support: 0, delegates: 0 },
+  };
+}
+
+export async function regions(): Promise<RegionRollup[]> {
+  return (await build()).map((r) => r.rollup);
+}
+
+export async function region(id: string): Promise<RegionPayload | null> {
+  const built = await build();
+  const found = built.find((r) => r.rollup.id === id);
+  if (!found) return null;
+  return { region: found.rollup, spine: found.rollup.spine, segments: await segments(), constituencies: found.constituencies };
+}
+
+export async function constituency(id: string): Promise<ConstituencyPayload | null> {
+  const built = await build();
+  let rollup: ConstituencyRollup | undefined;
+  let regionName = "";
+  for (const r of built) {
+    const c = r.constituencies.find((x) => x.id === id);
+    if (c) {
+      rollup = c;
+      regionName = r.rollup.name;
+      break;
+    }
+  }
+  if (!rollup) return null;
+  const roster = await getRealDelegates(regionName, rollup.name);
+  // Real roster maps onto the delegate-table shape; outcomes are empty (no calls).
+  const delegates = roster.map((d, i) => ({
+    id: `${id}-d${i}`,
+    externalRef: `${rollup!.code}-${String(i + 1).padStart(3, "0")}`,
+    name: d.name,
+    branch: "—",
+    phone: d.contact ?? "—",
+    type: d.position,
+    caller: null,
+    called: false,
+    reached: false,
+    outcome: null,
+    isInfluencer: /chair|secretary/i.test(d.position),
+    hasConflict: false,
+  }));
+  return { constituency: rollup, spine: rollup.spine, branches: [], callbacks: [], callers: [], delegates };
+}
+
+export async function projection(): Promise<ProjectionPayload> {
+  const regs = await build();
+  const delegates = regs.reduce((s, r) => s + r.rollup.kpis.delegates, 0);
+  return {
+    spine: zeroSpine(delegates),
+    weights: { supportive: 1.0, undecided: 0.35, not_reached: 0.15, opposed: 0.0 },
+    headline: 0,
+    confidenceBand: [0, 0],
+  };
+}
+
+export async function analytics(): Promise<AnalyticsPayload> {
+  const regs = await build();
+  const delegates = regs.reduce((s, r) => s + r.rollup.kpis.delegates, 0);
+  const priority = regs
+    .flatMap((r) => r.constituencies)
+    .filter((c) => c.kpis.delegates > 0)
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
+      region: regs.find((r) => r.rollup.id === c.regionId)?.rollup.name ?? "",
+      delegates: c.kpis.delegates,
+      coverage: 0,
+      projected: 0,
+      gap: c.kpis.delegates,
+      classification: c.classification,
+    }))
+    .sort((a, b) => b.delegates - a.delegates)
+    .slice(0, 8);
+
+  return {
+    kpis: zeroKpis(delegates),
+    spine: zeroSpine(delegates),
+    funnel: [
+      { stage: "Delegates", value: delegates },
+      { stage: "Called", value: 0 },
+      { stage: "Reached", value: 0 },
+      { stage: "Supportive", value: 0 },
+    ],
+    regions: regs.map((r) => ({ name: r.rollup.name, code: r.rollup.code, coverage: 0, projected: 0, delegates: r.rollup.kpis.delegates })),
+    classDistribution: [{ classification: "unrated", count: regs.flatMap((r) => r.constituencies).filter((c) => c.kpis.delegates > 0).length }],
+    priority,
+    segments: await segments(),
+    dailyReached: [],
+    supportRate: 0,
+    reachRate: 0,
+  };
+}
+
+export async function callers(): Promise<CallerPerf[]> {
+  return [];
+}
+
+export async function conflicts(): Promise<Conflict[]> {
+  return [];
+}
+
+export async function syncOverview(): Promise<SyncOverview> {
+  const counts = await getRosterCounts();
+  const total = REAL_HIERARCHY.reduce((s, r) => s + r.constituencies.length, 0);
+  return {
+    lastSyncMins: -1,
+    sheetsTotal: total,
+    sheetsSynced: 0,
+    staleSheets: 0,
+    conflictsOpen: 0,
+    nextSyncMins: 15,
+    runs: [],
+  };
+}
+
+// Public members (the 10 provisioned accounts) — never includes passwords.
+export async function members(): Promise<Member[]> {
+  return [
+    { userId: "u1", fullName: "Salim Adams", role: "super_admin", scope: "National", email: "superadmin@groundgame.gh", isActive: true },
+    { userId: "u2", fullName: "Efua Sarpong", role: "regional_coordinator", scope: "Greater Accra", email: "greateraccra.rc@groundgame.gh", isActive: true },
+    { userId: "u3", fullName: "Kwabena Osei", role: "regional_coordinator", scope: "Ashanti", email: "ashanti.rc@groundgame.gh", isActive: true },
+    { userId: "u4", fullName: "Fuseini Mahama", role: "regional_coordinator", scope: "Northern", email: "northern.rc@groundgame.gh", isActive: true },
+    { userId: "u5", fullName: "Mawuli Agbeko", role: "regional_coordinator", scope: "Volta", email: "volta.rc@groundgame.gh", isActive: true },
+    { userId: "u6", fullName: "Naa Adjeley", role: "constituency_coordinator", scope: "Greater Accra · Ablekuma North", email: "ablekuma.cc@groundgame.gh", isActive: true },
+    { userId: "u7", fullName: "Kofi Boateng", role: "constituency_coordinator", scope: "Ashanti · Bantama", email: "bantama.cc@groundgame.gh", isActive: true },
+    { userId: "u8", fullName: "Ama Owusu", role: "constituency_coordinator", scope: "Central · Effutu", email: "effutu.cc@groundgame.gh", isActive: true },
+    { userId: "u9", fullName: "Yaw Donkor", role: "analyst", scope: "National (read-only)", email: "analyst@groundgame.gh", isActive: true },
+    { userId: "u10", fullName: "Adwoa Mensimah", role: "analyst", scope: "Volta", email: "volta.analyst@groundgame.gh", isActive: true },
+  ];
+}

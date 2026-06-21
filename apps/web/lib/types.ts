@@ -8,7 +8,7 @@ export type Role =
   | "analyst";
 
 export type Outcome = "supportive" | "undecided" | "hostile" | "wrong_number";
-export type Classification = "stronghold" | "lean" | "tossup" | "weak";
+export type Classification = "stronghold" | "lean" | "tossup" | "weak" | "unrated";
 
 /** Stacked Supportive / Undecided / Opposed / Not-reached counts — the "support spine". */
 export interface Spine {

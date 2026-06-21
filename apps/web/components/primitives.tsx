@@ -63,11 +63,12 @@ export function Kpi({
   );
 }
 
-const CLASS_VARIANT: Record<Classification, "green" | "sky" | "amber" | "red"> = {
+const CLASS_VARIANT: Record<Classification, "green" | "sky" | "amber" | "red" | "secondary"> = {
   stronghold: "green",
   lean: "sky",
   tossup: "amber",
   weak: "red",
+  unrated: "secondary",
 };
 
 export function ClassBadge({ value }: { value: Classification }) {

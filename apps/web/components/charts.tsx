@@ -20,6 +20,7 @@ const CLASS_COLORS: Record<string, string> = {
   lean: "#3B82C4",
   tossup: "#DDA02C",
   weak: "#D64A3C",
+  unrated: "#B2BAC8",
 };
 
 const tooltipStyle = { borderRadius: 8, border: "1px solid #E3E8F0", fontSize: 12 } as const;

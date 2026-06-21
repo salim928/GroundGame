@@ -37,7 +37,7 @@ export function projectShare(s: Spine, w: ProjectionWeights = DEFAULT_WEIGHTS): 
   return weighted / total;
 }
 
-const THRESHOLDS: Record<Classification, number> = {
+const THRESHOLDS: Record<Exclude<Classification, "unrated">, number> = {
   stronghold: 0.65,
   lean: 0.55,
   tossup: 0.45,
@@ -73,4 +73,5 @@ export const CLASS_LABEL: Record<Classification, string> = {
   lean: "Lean",
   tossup: "Tossup",
   weak: "Weak",
+  unrated: "Not started",
 };
