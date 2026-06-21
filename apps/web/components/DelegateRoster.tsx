@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Download, Pencil, Phone, Plus, Search, Trash2, X } from "lucide-react";
+import { Check, Download, Loader2, Pencil, Phone, Plus, Search, Trash2, X } from "lucide-react";
 import type { RealDelegate } from "@/lib/delegates.server";
+import { getAccessToken } from "@/lib/supabase";
 import { Card } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { downloadCsv } from "@/lib/export";
 
 interface Row extends RealDelegate {
-  id: string;
+  rowId: string; // DB uuid for saved rows, or a temp id for unsaved ones
+  saved: boolean; // backed by a Supabase row
 }
 
 const POSITIONS = [
@@ -22,46 +24,98 @@ const POSITIONS = [
 
 export function DelegateRoster({
   constituency,
+  constituencyCode,
   initial,
 }: {
   constituency: string;
+  constituencyCode: string;
   initial: RealDelegate[];
 }) {
-  const [rows, setRows] = useState<Row[]>(initial.map((d, i) => ({ ...d, id: `d${i}` })));
+  const [rows, setRows] = useState<Row[]>(
+    initial.map((d, i) => ({ ...d, rowId: d.id ?? `local-${i}`, saved: Boolean(d.id) })),
+  );
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Row | null>(null);
   const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
     return t ? rows.filter((r) => r.name.toLowerCase().includes(t) || r.position.toLowerCase().includes(t)) : rows;
   }, [rows, q]);
 
+  async function api(method: string, body?: unknown, query = "") {
+    const token = await getAccessToken();
+    const res = await fetch(`/api/delegates${query}`, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? "Request failed");
+    return res.json().catch(() => ({}));
+  }
+
   function startEdit(r: Row) {
-    setEditing(r.id);
+    setError("");
+    setEditing(r.rowId);
     setDraft({ ...r });
   }
-  function save() {
-    if (!draft) return;
-    setRows((rs) => (rs.some((r) => r.id === draft.id) ? rs.map((r) => (r.id === draft.id ? draft : r)) : [...rs, draft]));
-    setEditing(null);
-    setDraft(null);
+
+  async function save() {
+    if (!draft || !draft.name.trim()) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (draft.saved) {
+        await api("PATCH", { id: draft.rowId, name: draft.name, position: draft.position, contact: draft.contact });
+        setRows((rs) => rs.map((r) => (r.rowId === draft.rowId ? { ...draft } : r)));
+      } else {
+        const out = await api("POST", {
+          constituencyCode,
+          name: draft.name,
+          position: draft.position,
+          contact: draft.contact,
+        });
+        const newId = (out.id as string) ?? draft.rowId;
+        setRows((rs) => rs.map((r) => (r.rowId === draft.rowId ? { ...draft, rowId: newId, saved: true } : r)));
+      }
+      setEditing(null);
+      setDraft(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not save");
+    }
+    setBusy(false);
   }
+
   function cancel() {
-    setRows((rs) => rs.filter((r) => r.name || r.position)); // drop empty new row
+    setRows((rs) => rs.filter((r) => r.saved || r.name || r.position));
     setEditing(null);
     setDraft(null);
+    setError("");
   }
-  function remove(id: string) {
-    setRows((rs) => rs.filter((r) => r.id !== id));
+
+  async function remove(r: Row) {
+    setError("");
+    if (r.saved) {
+      try {
+        await api("DELETE", undefined, `?id=${r.rowId}`);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Could not delete");
+        return;
+      }
+    }
+    setRows((rs) => rs.filter((x) => x.rowId !== r.rowId));
   }
+
   function add() {
-    const id = `new-${Date.now()}`;
-    const blank: Row = { id, position: "", name: "", contact: "" };
+    const rowId = `new-${Date.now()}`;
+    const blank: Row = { rowId, saved: false, position: "", name: "", contact: "" };
     setRows((rs) => [...rs, blank]);
-    setEditing(id);
+    setEditing(rowId);
     setDraft(blank);
   }
+
   function exportCsv() {
     downloadCsv(
       `${constituency.toLowerCase().replace(/\s+/g, "-")}-executives`,
@@ -90,6 +144,8 @@ export function DelegateRoster({
         </div>
       </div>
 
+      {error && <p className="px-5 pb-2 text-sm text-rose-600">{error}</p>}
+
       <Table>
         <TableHeader>
           <TableRow>
@@ -101,8 +157,8 @@ export function DelegateRoster({
         </TableHeader>
         <TableBody>
           {filtered.map((r) =>
-            editing === r.id && draft ? (
-              <TableRow key={r.id} className="bg-muted/40">
+            editing === r.rowId && draft ? (
+              <TableRow key={r.rowId} className="bg-muted/40">
                 <TableCell>
                   <select
                     value={draft.position}
@@ -133,17 +189,17 @@ export function DelegateRoster({
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <button onClick={save} className="rounded p-1.5 text-primary hover:bg-primary/10" title="Save">
-                      <Check size={15} />
+                    <button onClick={save} disabled={busy} className="rounded p-1.5 text-primary hover:bg-primary/10 disabled:opacity-40" title="Save">
+                      {busy ? <Loader2 size={15} className="animate-spin" /> : <Check size={15} />}
                     </button>
-                    <button onClick={cancel} className="rounded p-1.5 text-muted-foreground hover:bg-muted" title="Cancel">
+                    <button onClick={cancel} disabled={busy} className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-40" title="Cancel">
                       <X size={15} />
                     </button>
                   </div>
                 </TableCell>
               </TableRow>
             ) : (
-              <TableRow key={r.id}>
+              <TableRow key={r.rowId}>
                 <TableCell className="font-medium text-foreground">{r.position || "—"}</TableCell>
                 <TableCell>{r.name || "—"}</TableCell>
                 <TableCell className="tnum text-muted-foreground">
@@ -161,7 +217,7 @@ export function DelegateRoster({
                     <button onClick={() => startEdit(r)} className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Edit">
                       <Pencil size={15} />
                     </button>
-                    <button onClick={() => remove(r.id)} className="rounded p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600" title="Delete">
+                    <button onClick={() => remove(r)} className="rounded p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600" title="Delete">
                       <Trash2 size={15} />
                     </button>
                   </div>
@@ -179,7 +235,7 @@ export function DelegateRoster({
         </TableBody>
       </Table>
       <p className="px-5 py-3 text-xs text-muted-foreground">
-        Edits are local in this demo. Connecting the API persists changes to the database and writes back to the Sheet.
+        Changes save to the database for signed-in coordinators with access to this constituency.
       </p>
     </Card>
   );

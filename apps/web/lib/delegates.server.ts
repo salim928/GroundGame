@@ -5,6 +5,8 @@ import fs from "node:fs";
 import path from "node:path";
 
 export interface RealDelegate {
+  /** Supabase delegates.id when loaded from the DB (enables editing). Absent for the local file. */
+  id?: string;
   position: string;
   name: string;
   contact: string | null;
@@ -24,11 +26,12 @@ async function fromSupabase(): Promise<Store | null> {
   if (!url || !key) return null;
   try {
     const res = await fetch(
-      `${url}/rest/v1/delegates?select=position,full_name,phone,constituencies(name,regions(name))&is_active=eq.true&limit=20000`,
+      `${url}/rest/v1/delegates?select=id,position,full_name,phone,constituencies(name,regions(name))&is_active=eq.true&limit=20000`,
       { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" },
     );
     if (!res.ok) return null;
     const rows = (await res.json()) as Array<{
+      id: string;
       position: string;
       full_name: string;
       phone: string | null;
@@ -42,6 +45,7 @@ async function fromSupabase(): Promise<Store | null> {
       if (!cname || !region) continue;
       const k = keyOf(region, cname);
       (store[k] ??= { region, constituency: cname, delegates: [] }).delegates.push({
+        id: r.id,
         position: r.position,
         name: r.full_name,
         contact: r.phone,
@@ -154,6 +158,53 @@ export async function getCallStats(): Promise<Record<string, CallStat>> {
     return out;
   } catch {
     return {};
+  }
+}
+
+export interface CallerStat {
+  label: string;
+  region: string;
+  constituency: string;
+  attempts: number;
+  reached: number;
+  supportive: number;
+}
+
+/** Per-caller activity aggregated from call_records.caller_label (what the caller
+ *  console stamps on each logged call). Returns [] when Supabase isn't reachable. */
+export async function getCallerStats(): Promise<CallerStat[]> {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/call_records?select=caller_label,called,reached,outcome,delegates(constituencies(name,regions(name)))&caller_label=not.is.null&limit=100000`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" },
+    );
+    if (!res.ok) return [];
+    const rows = (await res.json()) as Array<{
+      caller_label: string | null;
+      called: boolean;
+      reached: boolean;
+      outcome: string | null;
+      delegates: { constituencies: { name: string; regions: { name: string } | null } | null } | null;
+    }>;
+    const byLabel: Record<string, CallerStat> = {};
+    for (const r of rows) {
+      const label = r.caller_label?.trim();
+      if (!label) continue;
+      const cname = r.delegates?.constituencies?.name ?? "";
+      const region = r.delegates?.constituencies?.regions?.name ?? "";
+      const s = (byLabel[label] ??= { label, region, constituency: cname, attempts: 0, reached: 0, supportive: 0 });
+      if (!s.constituency && cname) s.constituency = cname;
+      if (!s.region && region) s.region = region;
+      if (r.called) s.attempts += 1;
+      if (r.reached) s.reached += 1;
+      if (r.outcome === "supportive") s.supportive += 1;
+    }
+    return Object.values(byLabel);
+  } catch {
+    return [];
   }
 }
 

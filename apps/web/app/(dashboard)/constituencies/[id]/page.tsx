@@ -138,7 +138,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
 
       {realDelegates.length > 0 && (
         <div className="mt-4">
-          <DelegateRoster constituency={c.name} initial={realDelegates} />
+          <DelegateRoster constituency={c.name} constituencyCode={c.code} initial={realDelegates} />
         </div>
       )}
 

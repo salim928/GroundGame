@@ -10,6 +10,5 @@ export const data = {
   analytics: () => real.analytics(),
   callers: () => real.callers(),
   conflicts: () => real.conflicts(),
-  members: () => real.members(),
   syncOverview: () => real.syncOverview(),
 };

@@ -1,12 +1,10 @@
 import Link from "next/link";
 import { PhoneCall } from "lucide-react";
-import { data } from "@/lib/data";
 import { PageHeader } from "@/components/primitives";
 import { TeamManager } from "@/components/TeamManager";
 import { Button } from "@/components/ui/button";
 
-export default async function TeamPage() {
-  const members = await data.members();
+export default function TeamPage() {
   return (
     <>
       <PageHeader
@@ -20,7 +18,7 @@ export default async function TeamPage() {
           </Link>
         }
       />
-      <TeamManager initial={members} />
+      <TeamManager />
     </>
   );
 }

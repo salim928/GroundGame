@@ -133,6 +133,7 @@ export default function CallerConsolePage() {
     const { error: upErr } = await supa.from("call_records").upsert(
       {
         delegate_id: row.id,
+        caller_label: name || null,
         called: row.called,
         reached: row.reached,
         outcome: row.reached ? row.outcome : null,

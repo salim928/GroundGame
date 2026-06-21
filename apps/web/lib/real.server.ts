@@ -6,6 +6,7 @@ import { REAL_HIERARCHY } from "./hierarchy";
 import {
   getAllDelegates,
   getCallStats,
+  getCallerStats,
   getRealDelegates,
   getRosterCounts,
   rosterKey,
@@ -21,7 +22,6 @@ import type {
   ConstituencyPayload,
   ConstituencyRollup,
   Kpis,
-  Member,
   OverviewPayload,
   RegionPayload,
   RegionRollup,
@@ -231,7 +231,18 @@ export async function analytics(): Promise<AnalyticsPayload> {
 }
 
 export async function callers(): Promise<CallerPerf[]> {
-  return [];
+  const stats = await getCallerStats();
+  const reachedMax = Math.max(1, ...stats.map((s) => s.reached));
+  return stats
+    .map((s) => {
+      const reachRate = s.attempts ? s.reached / s.attempts : 0;
+      const conversion = s.reached ? s.supportive / s.reached : 0;
+      // Simple coaching signal: strong reach + conversion = top; low reach with effort = coach.
+      const flag: CallerPerf["flag"] =
+        s.reached >= reachedMax * 0.75 && conversion >= 0.5 ? "top" : s.attempts >= 5 && reachRate < 0.3 ? "coach" : null;
+      return { label: s.label, region: s.region, constituency: s.constituency, attempts: s.attempts, reached: s.reached, reachRate, conversion, flag };
+    })
+    .sort((a, b) => b.reached - a.reached);
 }
 
 export async function conflicts(): Promise<Conflict[]> {
@@ -252,18 +263,3 @@ export async function syncOverview(): Promise<SyncOverview> {
   };
 }
 
-// Public members (the 10 provisioned accounts) — never includes passwords.
-export async function members(): Promise<Member[]> {
-  return [
-    { userId: "u1", fullName: "Salim Adams", role: "super_admin", scope: "National", email: "superadmin@groundgame.gh", isActive: true },
-    { userId: "u2", fullName: "Efua Sarpong", role: "regional_coordinator", scope: "Greater Accra", email: "greateraccra.rc@groundgame.gh", isActive: true },
-    { userId: "u3", fullName: "Kwabena Osei", role: "regional_coordinator", scope: "Ashanti", email: "ashanti.rc@groundgame.gh", isActive: true },
-    { userId: "u4", fullName: "Fuseini Mahama", role: "regional_coordinator", scope: "Northern", email: "northern.rc@groundgame.gh", isActive: true },
-    { userId: "u5", fullName: "Mawuli Agbeko", role: "regional_coordinator", scope: "Volta", email: "volta.rc@groundgame.gh", isActive: true },
-    { userId: "u6", fullName: "Naa Adjeley", role: "constituency_coordinator", scope: "Greater Accra · Ablekuma North", email: "ablekuma.cc@groundgame.gh", isActive: true },
-    { userId: "u7", fullName: "Kofi Boateng", role: "constituency_coordinator", scope: "Ashanti · Bantama", email: "bantama.cc@groundgame.gh", isActive: true },
-    { userId: "u8", fullName: "Ama Owusu", role: "constituency_coordinator", scope: "Central · Effutu", email: "effutu.cc@groundgame.gh", isActive: true },
-    { userId: "u9", fullName: "Yaw Donkor", role: "analyst", scope: "National (read-only)", email: "analyst@groundgame.gh", isActive: true },
-    { userId: "u10", fullName: "Adwoa Mensimah", role: "analyst", scope: "Volta", email: "volta.analyst@groundgame.gh", isActive: true },
-  ];
-}
