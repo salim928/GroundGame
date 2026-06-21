@@ -46,7 +46,7 @@ def clean_constituency(filename: str) -> str:
 
 # Position canonicalisation — order matters (deputy/vice variants first).
 POSITION_PATTERNS = [
-    (r"vice\s*chair", "Vice Chairman"),
+    (r"vice[\s-]*chair(?:man|person)?", "Vice Chairman"),
     (r"deputy\s*secretary", "Deputy Secretary"),
     (r"deputy\s*treasurer", "Deputy Treasurer"),
     (r"deputy\s*(women'?s?)\s*organi[sz]er", "Deputy Women's Organizer"),
@@ -155,21 +155,50 @@ def from_tables(tables):
             out.append({"position": pos, "name": title_name(name), "contact": phone_in(joined)})
     return out
 
-def from_lines(lines):
+# Lines that end on a wrapped position fragment (e.g. "Communication" / "Officer").
+FRAG_RE = re.compile(r"(communication|deputy|women|youth|nasara|council of|dep\.?|vice|other)\s*$", re.I)
+
+def merge_fragments(lines):
+    out, i = [], 0
+    while i < len(lines):
+        cur = lines[i]
+        while FRAG_RE.search(cur) and i + 1 < len(lines):
+            i += 1
+            cur = cur + " " + lines[i]
+        out.append(cur)
+        i += 1
+    return out
+
+def name_from(body):
+    s = body
+    for rx, _ in POSITION_RE:
+        s = rx.sub(" ", s)
+    s = re.sub(r"\b(elected|unopposed|votes?|contesting|positions?|member|caucus|zongo|other)\b", " ", s, flags=re.I)
+    s = re.sub(r"[^A-Za-z.'\- ]", " ", s)
+    return re.sub(r"\s{2,}", " ", s).strip()
+
+def from_text(lines):
+    """State machine that handles inline rows (pos+name+phone on one line),
+    vertical columns (pos / no / name / phone), and wrapped positions."""
+    lines = merge_fragments([l.strip() for l in lines if l.strip()])
     out = []
+    pend_pos = pend_phone = None
     for ln in lines:
-        pos = canon_position(ln)
-        if not pos:
-            continue
         phone = phone_in(ln)
-        # strip position words + phone, keep the rest as candidate name
-        rest = PHONE_RE.sub("", re.sub(r"[\s-]", " ", ln))
-        for rx, _ in POSITION_RE:
-            rest = rx.sub(" ", rest)
-        rest = re.sub(r"[^A-Za-z.'\- ]", " ", rest)
-        rest = re.sub(r"\s{2,}", " ", rest).strip()
-        if is_name(rest):
-            out.append({"position": pos, "name": title_name(rest), "contact": phone})
+        body = re.sub(r"^\s*\d{1,3}[.)]?\s*", "", PHONE_RE.sub(" ", ln))  # drop phone + numbering
+        pos = canon_position(body)
+        nm = name_from(body)
+        named = is_name(nm)
+        if pos and named:
+            out.append({"position": pos, "name": title_name(nm), "contact": phone})
+            pend_pos = pend_phone = None
+        elif pos:
+            pend_pos, pend_phone = pos, phone or pend_phone
+        elif named and pend_pos:
+            out.append({"position": pend_pos, "name": title_name(nm), "contact": phone or pend_phone})
+            pend_pos = pend_phone = None
+        elif phone and pend_pos:
+            pend_phone = phone
     return out
 
 def dedupe(dels):
@@ -182,6 +211,64 @@ def dedupe(dels):
         out.append(d)
     return out
 
+# --- combined single-document regions (Bono, Upper West) -----------------------
+POS_BREAK = re.compile(
+    r"(?=(?:Chairman|Vice\s*Chair|Secretary|Deputy|Treasurer|Organi[sz]er|Communication|"
+    r"Women|Youth|Nasara|Council))",
+    re.I,
+)
+
+def blob_to_lines(seg):
+    return [x for x in POS_BREAK.sub("\n", seg).splitlines() if x.strip()]
+
+# Anchor (uppercase as found in the doc) -> hierarchy constituency name.
+UPPER_WEST_ANCHORS = {
+    "WA CENTRAL": "Wa Central", "WA EAST": "Wa East", "WA WEST": "Wa West", "JIRAPA": "Jirapa",
+    "LAWRA": "Lawra", "LAMBUSSIE": "Lambussie Karni", "NANDOM": "Nandom",
+    "SISSALA WEST": "Sissala West", "SISSALA EAST": "Sissala East",
+    "NADOWLI": "Nadowli Kaleo", "DBI": "Daffiama Bussie Issa", "DAFFIAMA": "Daffiama Bussie Issa",
+}
+BONO_ANCHORS = {
+    "SUNYANI EAST": "Sunyani East", "SUNYANI WEST": "Sunyani West", "BEREKUM EAST": "Berekum East",
+    "BEREKUM WEST": "Berekum West", "DORMAA CENTRAL": "Dormaa Central", "DORMAA EAST": "Dormaa East",
+    "DORMAA WEST": "Dormaa West", "JAMAN NORTH": "Jaman North", "JAMAN SOUTH": "Jaman South",
+    "BANDA": "Banda", "TAIN": "Tain", "WENCHI": "Wenchi",
+}
+
+BONO_ROW = re.compile(r"([A-Z][A-Z.]+(?:\s+[A-Z][A-Z.]+){0,3})\s+ELECTED\s+([A-Z]+(?:\s+[A-Z]+)?)\s+(0\d{9})")
+
+def parse_combined(text, anchors):
+    # Split the blob at each constituency anchor, keeping order.
+    keys = sorted(anchors, key=len, reverse=True)
+    rx = re.compile(r"(" + "|".join(re.escape(k) for k in keys) + r")")
+    parts = rx.split(text)
+    out = {}  # constituency -> [delegates]
+    current = None
+    for piece in parts:
+        up = piece.strip().upper()
+        if up in anchors:
+            current = anchors[up]
+            out.setdefault(current, [])
+            continue
+        if not current:
+            continue
+        if "ELECTED" in piece:  # Bono style: NAME ELECTED POSITION PHONE
+            for nm, pos_raw, phone in BONO_ROW.findall(piece):
+                pos = canon_position(pos_raw)
+                if pos and is_name(name_from(nm)):
+                    out[current].append({"position": pos, "name": title_name(name_from(nm)), "contact": phone})
+        else:  # Upper West style: POSITION NAME PHONE
+            out[current].extend(from_text(blob_to_lines(piece)))
+    return {k: dedupe(v) for k, v in out.items() if v}
+
+def read_any_text(path, ext):
+    if ext == "docx":
+        root = ET.fromstring(zipfile.ZipFile(path).read("word/document.xml"))
+        return " ".join(t.text or "" for t in root.iter(W + "t"))
+    if ext == "pdf" and pypdf:
+        return " ".join((pg.extract_text() or "") for pg in pypdf.PdfReader(path).pages)
+    return ""
+
 def main():
     result = {}
     stats = {"files": 0, "with_delegates": 0, "delegates": 0, "by_ext": {}, "empty": []}
@@ -190,6 +277,26 @@ def main():
         if not os.path.isdir(full):
             continue
         region = REGION_META.get(region_dir, region_dir.title())
+
+        # Combined single-document regions: one doc holds every constituency.
+        anchors = UPPER_WEST_ANCHORS if region_dir == "UPPER WEST" else BONO_ANCHORS if region_dir == "BONO" else None
+        if anchors:
+            for fn in sorted(os.listdir(full)):
+                if fn.startswith("~$") or not os.path.isfile(os.path.join(full, fn)):
+                    continue
+                ext = fn.rsplit(".", 1)[-1].lower()
+                stats["files"] += 1
+                stats["by_ext"][ext] = stats["by_ext"].get(ext, 0) + 1
+                try:
+                    parsed = parse_combined(read_any_text(os.path.join(full, fn), ext), anchors)
+                except Exception:
+                    parsed = {}
+                for con, dels in parsed.items():
+                    stats["with_delegates"] += 1
+                    stats["delegates"] += len(dels)
+                    result[f"{region}::{con.lower()}"] = {"region": region, "constituency": con, "delegates": dels}
+            continue
+
         for fn in sorted(os.listdir(full)):
             if fn.startswith("~$"):
                 continue
@@ -214,8 +321,10 @@ def main():
             except Exception:
                 tables, lines = [], []
             dels = from_tables(tables)
-            if len(dels) < 3:  # tables thin -> try text
-                dels = dels or from_lines(lines)
+            if len(dels) < 5:  # tables thin -> try text, keep whichever is richer
+                alt = from_text(lines)
+                if len(alt) > len(dels):
+                    dels = alt
             dels = dedupe(dels)
             key = f"{region}::{con.lower()}"
             if dels:
