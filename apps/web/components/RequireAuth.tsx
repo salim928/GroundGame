@@ -3,11 +3,12 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getSession } from "@/lib/session";
+import { canAccess, ROLE_HOME } from "@/lib/access";
 
 /**
- * Client-side guard: signed-out users are bounced to /login.
- * Renders children immediately (session lives in localStorage, client-only) and
- * redirects on mount if there's no session — so authed users see no spinner flash.
+ * Client-side guard: signed-out users are bounced to /login, and signed-in users
+ * who reach a page outside their role's allowed area are sent to their home.
+ * Renders children immediately (session is client-only) so authed users see no flash.
  */
 export function RequireAuth({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -19,8 +20,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
-    // Callers don't belong on the staff dashboard — send them to their console.
-    if (session.role === "caller") router.replace("/caller");
+    if (!canAccess(session.role, pathname)) router.replace(ROLE_HOME[session.role]);
   }, [router, pathname]);
 
   return <>{children}</>;

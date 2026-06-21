@@ -20,6 +20,7 @@ import {
   FolderTree,
 } from "lucide-react";
 import { clearSession, getSession, type DemoPersona } from "@/lib/session";
+import { canAccess } from "@/lib/access";
 
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, section: "Campaign" },
@@ -55,6 +56,9 @@ export function Sidebar() {
     }
     router.push("/login");
   }
+
+  // Only show nav entries this role may actually open (strict access).
+  const items = persona ? NAV.filter((it) => canAccess(persona.role, it.href)) : NAV;
 
   const width = collapsed ? "w-16" : "w-60";
 
@@ -93,10 +97,10 @@ export function Sidebar() {
         </div>
 
         <nav className="mt-2 flex-1 space-y-1 px-2">
-          {NAV.map((item, i) => {
+          {items.map((item, i) => {
             const active = pathname === item.href || pathname.startsWith(item.href + "/");
             const Icon = item.icon;
-            const showHeader = !collapsed && item.section !== NAV[i - 1]?.section;
+            const showHeader = !collapsed && item.section !== items[i - 1]?.section;
             return (
               <div key={item.href}>
                 {showHeader && (

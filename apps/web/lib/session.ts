@@ -16,6 +16,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
   { key: "regional", name: "Efua Sarpong", role: "regional_coordinator", roleLabel: "Regional Coordinator", scope: "Greater Accra", email: "efua@groundgame.app" },
   { key: "constituency", name: "Naa Adjeley", role: "constituency_coordinator", roleLabel: "Constituency Coordinator", scope: "Greater Accra 1", email: "naa@groundgame.app" },
   { key: "analyst", name: "Yaw Donkor", role: "analyst", roleLabel: "Analyst", scope: "National (read-only)", email: "yaw@groundgame.app" },
+  { key: "caller", name: "Kojo Mensah", role: "caller", roleLabel: "Caller", scope: "Greater Accra · Ablekuma North", email: "kojo@groundgame.app" },
 ];
 
 const KEY = "gg.session";
