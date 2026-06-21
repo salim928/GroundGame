@@ -5,7 +5,8 @@ export type Role =
   | "super_admin"
   | "regional_coordinator"
   | "constituency_coordinator"
-  | "analyst";
+  | "analyst"
+  | "caller";
 
 export type Outcome = "supportive" | "undecided" | "hostile" | "wrong_number";
 export type Classification = "stronghold" | "lean" | "tossup" | "weak" | "unrated";

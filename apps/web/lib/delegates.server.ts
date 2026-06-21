@@ -109,4 +109,52 @@ export async function rosterStats(): Promise<{ constituencies: number; delegates
   return { constituencies: vals.length, delegates: vals.reduce((s, v) => s + v.delegates.length, 0) };
 }
 
+export interface CallStat {
+  called: number;
+  reached: number;
+  supportive: number;
+  undecided: number;
+  opposed: number;
+}
+
+/**
+ * Live call activity per constituency, aggregated from call_records (what callers
+ * log). Returns {} when Supabase isn't reachable so the dashboard falls back to
+ * zeros. Not cached — reflects new calls on the next page load.
+ */
+export async function getCallStats(): Promise<Record<string, CallStat>> {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return {};
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/call_records?select=called,reached,outcome,delegates(constituencies(name,regions(name)))&limit=100000`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" },
+    );
+    if (!res.ok) return {};
+    const rows = (await res.json()) as Array<{
+      called: boolean;
+      reached: boolean;
+      outcome: string | null;
+      delegates: { constituencies: { name: string; regions: { name: string } | null } | null } | null;
+    }>;
+    const out: Record<string, CallStat> = {};
+    for (const r of rows) {
+      const cname = r.delegates?.constituencies?.name;
+      const region = r.delegates?.constituencies?.regions?.name;
+      if (!cname || !region) continue;
+      const k = keyOf(region, cname);
+      const s = (out[k] ??= { called: 0, reached: 0, supportive: 0, undecided: 0, opposed: 0 });
+      if (r.called) s.called += 1;
+      if (r.reached) s.reached += 1;
+      if (r.outcome === "supportive") s.supportive += 1;
+      else if (r.outcome === "undecided") s.undecided += 1;
+      else if (r.outcome === "hostile") s.opposed += 1;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export const rosterKey = keyOf;

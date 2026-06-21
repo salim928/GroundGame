@@ -3,8 +3,17 @@
 // metrics are zero until the field operation ticks sheets and the sync fills
 // call_records; they then populate here. Server-only.
 import { REAL_HIERARCHY } from "./hierarchy";
-import { getAllDelegates, getRealDelegates, getRosterCounts, rosterKey } from "./delegates.server";
+import {
+  getAllDelegates,
+  getCallStats,
+  getRealDelegates,
+  getRosterCounts,
+  rosterKey,
+  type CallStat,
+} from "./delegates.server";
+import { addSpines, classify, projectShare } from "./analytics";
 import type {
+  Classification,
   AnalyticsPayload,
   CallerPerf,
   Conflict,
@@ -22,41 +31,62 @@ import type {
 } from "./types";
 
 const TARGET = 10;
+const EMPTY_SPINE: Spine = { supportive: 0, undecided: 0, opposed: 0, notReached: 0 };
 
-function zeroKpis(delegates: number): Kpis {
-  return { delegates, called: 0, reached: 0, coverage: 0, projectedSupport: 0 };
+// Derive a support spine from logged calls; unreached delegates fill notReached.
+function spineFrom(delegates: number, st: CallStat | undefined): Spine {
+  const supportive = st?.supportive ?? 0;
+  const undecided = st?.undecided ?? 0;
+  const opposed = st?.opposed ?? 0;
+  return { supportive, undecided, opposed, notReached: Math.max(0, delegates - supportive - undecided - opposed) };
 }
-function zeroSpine(delegates: number): Spine {
-  return { supportive: 0, undecided: 0, opposed: 0, notReached: delegates };
+function kpisFrom(delegates: number, st: CallStat | undefined, spine: Spine): Kpis {
+  const called = st?.called ?? 0;
+  const reached = st?.reached ?? 0;
+  return { delegates, called, reached, coverage: delegates ? called / delegates : 0, projectedSupport: projectShare(spine) };
+}
+function classFrom(spine: Spine, reached: number): Classification {
+  return reached === 0 ? "unrated" : classify(projectShare(spine));
+}
+function aggregate(items: { kpis: Kpis; spine: Spine }[]): { kpis: Kpis; spine: Spine } {
+  const spine = items.reduce((acc, i) => addSpines(acc, i.spine), EMPTY_SPINE);
+  const delegates = items.reduce((s, i) => s + i.kpis.delegates, 0);
+  const called = items.reduce((s, i) => s + i.kpis.called, 0);
+  const reached = items.reduce((s, i) => s + i.kpis.reached, 0);
+  return { spine, kpis: { delegates, called, reached, coverage: delegates ? called / delegates : 0, projectedSupport: projectShare(spine) } };
 }
 
 async function build() {
-  const counts = await getRosterCounts();
+  const [counts, stats] = await Promise.all([getRosterCounts(), getCallStats()]);
   const regions = REAL_HIERARCHY.map((r) => {
     const constituencies: ConstituencyRollup[] = r.constituencies.map((c) => {
-      const delegates = counts[rosterKey(r.name, c.name)] ?? 0;
+      const key = rosterKey(r.name, c.name);
+      const delegates = counts[key] ?? 0;
+      const st = stats[key];
+      const spine = spineFrom(delegates, st);
+      const kpis = kpisFrom(delegates, st, spine);
       return {
         id: `c-${c.code}`,
         regionId: `r-${r.code}`,
         name: c.name,
         code: c.code,
-        kpis: zeroKpis(delegates),
-        spine: zeroSpine(delegates),
+        kpis,
+        spine,
         callersAssigned: 0,
         targetContacts: TARGET,
-        classification: "unrated" as const,
-        status: delegates > 0 ? ("ok" as const) : ("no_callers" as const),
+        classification: classFrom(spine, kpis.reached),
+        status: delegates === 0 ? ("no_callers" as const) : ("ok" as const),
       };
     });
-    const delegates = constituencies.reduce((s, c) => s + c.kpis.delegates, 0);
+    const agg = aggregate(constituencies);
     const rollup: RegionRollup = {
       id: `r-${r.code}`,
       name: r.name,
       code: r.code,
-      kpis: zeroKpis(delegates),
-      spine: zeroSpine(delegates),
+      kpis: agg.kpis,
+      spine: agg.spine,
       constituencies: r.constituencies.length,
-      classification: "unrated",
+      classification: classFrom(agg.spine, agg.kpis.reached),
     };
     return { rollup, constituencies };
   });
@@ -76,17 +106,23 @@ async function segments(): Promise<SegmentEngagement[]> {
 
 export async function overview(): Promise<OverviewPayload> {
   const regions = await build();
-  const delegates = regions.reduce((s, r) => s + r.rollup.kpis.delegates, 0);
-  const withRoster = regions.flatMap((r) => r.constituencies).filter((c) => c.kpis.delegates > 0).length;
+  const allCons = regions.flatMap((r) => r.constituencies);
+  const national = aggregate(allCons);
+  const delegates = national.kpis.delegates;
+  const reached = national.kpis.reached;
+  const withRoster = allCons.filter((c) => c.kpis.delegates > 0).length;
   const totalCons = regions.reduce((s, r) => s + r.constituencies.length, 0);
   const noRoster = totalCons - withRoster;
+  const daysLeft = 21;
 
   return {
-    kpis: zeroKpis(delegates),
-    spine: zeroSpine(delegates),
+    kpis: national.kpis,
+    spine: national.spine,
     dailyReached: [],
     alerts: [
-      { id: "calls", kind: "stale_data", severity: "info", message: "Field calls not started — call metrics populate as callers tick sheets", scope: "National" },
+      ...(reached === 0
+        ? [{ id: "calls", kind: "stale_data" as const, severity: "info" as const, message: "Field calls not started — metrics populate as callers log outcomes", scope: "National" }]
+        : []),
       ...(noRoster > 0
         ? [{ id: "roster", kind: "no_callers" as const, severity: "warn" as const, message: `${noRoster} constituencies have no roster loaded yet`, scope: "National" }]
         : []),
@@ -94,7 +130,14 @@ export async function overview(): Promise<OverviewPayload> {
     regions: regions.map((r) => r.rollup),
     segments: await segments(),
     syncHealth: { lastSyncMins: -1, sheetsSynced: 0, sheetsTotal: totalCons, conflictsOpen: 0, staleSheets: 0 },
-    paceToTarget: { reachedToTarget: 0, target: delegates, daysLeft: 21, reachedPerDay: 0, requiredPerDay: Math.ceil(delegates / 21), onPace: false },
+    paceToTarget: {
+      reachedToTarget: delegates ? reached / delegates : 0,
+      target: delegates,
+      daysLeft,
+      reachedPerDay: 0,
+      requiredPerDay: Math.ceil(Math.max(0, delegates - reached) / daysLeft),
+      onPace: false,
+    },
     trends: { coverage: 0, reached: 0, support: 0, delegates: 0 },
   };
 }
@@ -144,50 +187,60 @@ export async function constituency(id: string): Promise<ConstituencyPayload | nu
 
 export async function projection(): Promise<ProjectionPayload> {
   const regs = await build();
-  const delegates = regs.reduce((s, r) => s + r.rollup.kpis.delegates, 0);
+  const national = aggregate(regs.flatMap((r) => r.constituencies));
+  const headline = national.kpis.projectedSupport;
+  const band = headline > 0 ? 0.05 : 0;
   return {
-    spine: zeroSpine(delegates),
+    spine: national.spine,
     weights: { supportive: 1.0, undecided: 0.35, not_reached: 0.15, opposed: 0.0 },
-    headline: 0,
-    confidenceBand: [0, 0],
+    headline,
+    confidenceBand: [Math.max(0, headline - band), Math.min(1, headline + band)],
   };
 }
 
 export async function analytics(): Promise<AnalyticsPayload> {
   const regs = await build();
-  const delegates = regs.reduce((s, r) => s + r.rollup.kpis.delegates, 0);
-  const priority = regs
-    .flatMap((r) => r.constituencies)
+  const cons = regs.flatMap((r) => r.constituencies);
+  const national = aggregate(cons);
+  const priority = cons
     .filter((c) => c.kpis.delegates > 0)
     .map((c) => ({
       id: c.id,
       name: c.name,
       region: regs.find((r) => r.rollup.id === c.regionId)?.rollup.name ?? "",
       delegates: c.kpis.delegates,
-      coverage: 0,
-      projected: 0,
-      gap: c.kpis.delegates,
+      coverage: c.kpis.coverage,
+      projected: c.kpis.projectedSupport,
+      gap: Math.round(c.kpis.delegates * (1 - c.kpis.coverage)),
       classification: c.classification,
     }))
-    .sort((a, b) => b.delegates - a.delegates)
+    // Priority = many delegates still uncovered (high gap), then low coverage.
+    .sort((a, b) => b.gap - a.gap || a.coverage - b.coverage)
     .slice(0, 8);
 
+  const classDistribution = (["stronghold", "lean", "tossup", "weak", "unrated"] as Classification[])
+    .map((classification) => ({
+      classification,
+      count: cons.filter((c) => c.kpis.delegates > 0 && c.classification === classification).length,
+    }))
+    .filter((d) => d.count > 0);
+
   return {
-    kpis: zeroKpis(delegates),
-    spine: zeroSpine(delegates),
+    kpis: national.kpis,
+    spine: national.spine,
     funnel: [
-      { stage: "Delegates", value: delegates },
-      { stage: "Called", value: 0 },
-      { stage: "Reached", value: 0 },
-      { stage: "Supportive", value: 0 },
+      { stage: "Delegates", value: national.kpis.delegates },
+      { stage: "Called", value: national.kpis.called },
+      { stage: "Reached", value: national.kpis.reached },
+      { stage: "Supportive", value: national.spine.supportive },
     ],
-    regions: regs.map((r) => ({ name: r.rollup.name, code: r.rollup.code, coverage: 0, projected: 0, delegates: r.rollup.kpis.delegates })),
-    classDistribution: [{ classification: "unrated", count: regs.flatMap((r) => r.constituencies).filter((c) => c.kpis.delegates > 0).length }],
+    regions: regs.map((r) => ({ name: r.rollup.name, code: r.rollup.code, coverage: r.rollup.kpis.coverage, projected: r.rollup.kpis.projectedSupport, delegates: r.rollup.kpis.delegates })),
+    classDistribution,
     priority,
     segments: await segments(),
     dailyReached: [],
-    supportRate: 0,
-    reachRate: 0,
+    supportRate: national.kpis.reached ? national.spine.supportive / national.kpis.reached : 0,
+    reachRate: national.kpis.called ? national.kpis.reached / national.kpis.called : 0,
   };
 }
 

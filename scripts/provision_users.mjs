@@ -25,6 +25,9 @@ const DEFS = [
   { name: "Ama Owusu", email: "effutu.cc@groundgame.gh", role: "constituency_coordinator", region: "CEN", constituency: "CEN11" },
   { name: "Yaw Donkor", email: "analyst@groundgame.gh", role: "analyst" },
   { name: "Adwoa Mensimah", email: "volta.analyst@groundgame.gh", role: "analyst", region: "VOL" },
+  // Field callers — each scoped to a single constituency (shares it with a CC above).
+  { name: "Kojo Mensah", email: "ablekuma.caller@groundgame.gh", role: "caller", region: "GAR", constituency: "GAR03" },
+  { name: "Abena Nyarko", email: "bantama.caller@groundgame.gh", role: "caller", region: "ASH", constituency: "ASH18" },
 ];
 
 // Strong, readable passwords (no ambiguous chars).
@@ -35,11 +38,20 @@ function password() {
   return `${pick(alpha, 6)}-${pick(digits, 4)}-${pick(alpha, 3)}`;
 }
 
-// Build (or reuse) the account list with passwords.
+// Build (or reuse) the account list with passwords. Existing accounts keep their
+// passwords; any newly-added DEFS (e.g. callers) are appended with fresh ones.
 let accounts;
 if (fs.existsSync(ACCOUNTS_FILE)) {
   accounts = JSON.parse(fs.readFileSync(ACCOUNTS_FILE, "utf8"));
-  console.log(`Reusing ${ACCOUNTS_FILE} (${accounts.length} accounts).`);
+  const have = new Set(accounts.map((a) => a.email));
+  const added = DEFS.filter((d) => !have.has(d.email)).map((d) => ({ ...d, password: password() }));
+  if (added.length) {
+    accounts = [...accounts, ...added];
+    fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2));
+    console.log(`Updated ${ACCOUNTS_FILE}: +${added.length} new (${accounts.length} total).`);
+  } else {
+    console.log(`Reusing ${ACCOUNTS_FILE} (${accounts.length} accounts).`);
+  }
 } else {
   accounts = DEFS.map((d) => ({ ...d, password: password() }));
   fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify(accounts, null, 2));

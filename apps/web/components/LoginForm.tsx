@@ -15,6 +15,7 @@ const ROLE_LABELS: Record<string, string> = {
   regional_coordinator: "Regional Coordinator",
   constituency_coordinator: "Constituency Coordinator",
   analyst: "Analyst",
+  caller: "Caller",
 };
 
 export function LoginForm() {
@@ -62,7 +63,8 @@ export function LoginForm() {
       scope,
       email: email.trim(),
     });
-    router.push("/dashboard");
+    // Callers get a focused, constituency-scoped console; staff get the dashboard.
+    router.push(role === "caller" ? "/caller" : "/dashboard");
   }
 
   function demoSignIn(p: DemoPersona) {

@@ -16,13 +16,17 @@ const ROLE_LABEL: Record<Role, string> = {
   regional_coordinator: "Regional Coordinator",
   constituency_coordinator: "Constituency Coordinator",
   analyst: "Analyst",
+  caller: "Caller",
 };
 const ROLE_TONE: Record<Role, "blue" | "green" | "amber" | "secondary"> = {
   super_admin: "blue",
   regional_coordinator: "green",
   constituency_coordinator: "amber",
   analyst: "secondary",
+  caller: "secondary",
 };
+// Staff roles offered in the member form — callers are created on the Callers page.
+const STAFF_ROLES: Role[] = ["super_admin", "regional_coordinator", "constituency_coordinator", "analyst"];
 
 export function TeamManager({ initial }: { initial: Member[] }) {
   const [members, setMembers] = useState<Member[]>(initial);
@@ -89,7 +93,7 @@ export function TeamManager({ initial }: { initial: Member[] }) {
                 onChange={(e) => setRole(e.target.value as Role)}
                 className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
               >
-                {(Object.keys(ROLE_LABEL) as Role[]).map((r) => (
+                {STAFF_ROLES.map((r) => (
                   <option key={r} value={r}>
                     {ROLE_LABEL[r]}
                   </option>

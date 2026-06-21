@@ -14,7 +14,13 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    if (!getSession()) router.replace("/login");
+    const session = getSession();
+    if (!session) {
+      router.replace("/login");
+      return;
+    }
+    // Callers don't belong on the staff dashboard — send them to their console.
+    if (session.role === "caller") router.replace("/caller");
   }, [router, pathname]);
 
   return <>{children}</>;
