@@ -22,3 +22,8 @@ GroundGame_Build_Spec.docx
 constituency conference/
 apps/web/lib/delegates.local.json
 supabase/seed_delegates.local.sql
+
+# Login credentials (passwords) — never commit
+scripts/accounts.local.json
+*.local.pdf
+GroundGame_Logins*.pdf

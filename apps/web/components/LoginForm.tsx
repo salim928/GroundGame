@@ -2,22 +2,71 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, ShieldCheck, Target } from "lucide-react";
+import { ArrowRight, Loader2, Target, TriangleAlert } from "lucide-react";
 import { DEMO_PERSONAS, setSession, type DemoPersona } from "@/lib/session";
+import { getSupabase, supabaseConfigured } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
+const ROLE_LABELS: Record<string, string> = {
+  super_admin: "Super Admin",
+  regional_coordinator: "Regional Coordinator",
+  constituency_coordinator: "Constituency Coordinator",
+  analyst: "Analyst",
+};
+
 export function LoginForm() {
   const router = useRouter();
-  const [persona, setPersona] = useState<DemoPersona>(DEMO_PERSONAS[0]);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [showDemo, setShowDemo] = useState(false);
 
-  function signIn(e?: React.FormEvent) {
-    e?.preventDefault();
+  async function signIn(e: React.FormEvent) {
+    e.preventDefault();
+    setError("");
+    const supa = getSupabase();
+    if (!supa) {
+      setError("Sign-in is not configured. Set NEXT_PUBLIC_SUPABASE_URL / ANON_KEY.");
+      return;
+    }
     setLoading(true);
-    setSession(persona);
+    const { data, error: authErr } = await supa.auth.signInWithPassword({ email: email.trim(), password });
+    if (authErr || !data.user) {
+      setError("Invalid email or password.");
+      setLoading(false);
+      return;
+    }
+    // Resolve the user's role + scope from their profile.
+    const { data: profile } = await supa
+      .from("profiles")
+      .select("role, full_name, regions(name), constituencies(name)")
+      .eq("user_id", data.user.id)
+      .single();
+
+    const role = (profile?.role as string) ?? "analyst";
+    const region = (profile as any)?.regions?.name as string | undefined;
+    const constituency = (profile as any)?.constituencies?.name as string | undefined;
+    const scope = constituency
+      ? `${region ?? ""} · ${constituency}`
+      : region ?? (role === "super_admin" ? "National" : "National (read-only)");
+
+    setSession({
+      key: "supabase",
+      name: (profile?.full_name as string) ?? email,
+      role: role as DemoPersona["role"],
+      roleLabel: ROLE_LABELS[role] ?? "Member",
+      scope,
+      email: email.trim(),
+    });
+    router.push("/dashboard");
+  }
+
+  function demoSignIn(p: DemoPersona) {
+    setSession(p);
     router.push("/dashboard");
   }
 
@@ -29,7 +78,7 @@ export function LoginForm() {
           <span className="text-lg font-semibold text-foreground">GroundGame</span>
         </div>
 
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Welcome back</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">
           Delegate Mobilization &amp; Call-Tracking — trusted leadership access only.
         </p>
@@ -37,44 +86,79 @@ export function LoginForm() {
         <form onSubmit={signIn} className="mt-8 space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" key={persona.email} defaultValue={persona.email} />
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@groundgame.gh"
+              required
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" defaultValue="demo1234" />
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
           </div>
+
+          {error && (
+            <div className="flex items-center gap-2 rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              <TriangleAlert size={15} /> {error}
+            </div>
+          )}
+
           <Button type="submit" className="w-full" size="lg" disabled={loading}>
-            {loading ? "Signing in…" : "Sign in"}
-            {!loading && <ArrowRight />}
+            {loading ? (
+              <>
+                <Loader2 className="animate-spin" /> Signing in…
+              </>
+            ) : (
+              <>
+                Sign in <ArrowRight />
+              </>
+            )}
           </Button>
         </form>
 
-        <div className="mt-8">
-          <div className="mb-2.5 flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            <ShieldCheck size={14} /> Demo access — explore as
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {DEMO_PERSONAS.map((p) => {
-              const active = p.key === persona.key;
-              return (
+        {!supabaseConfigured && (
+          <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Supabase isn't configured in this environment, so real sign-in is unavailable. Use a demo account below.
+          </p>
+        )}
+
+        <div className="mt-8 border-t border-border pt-4">
+          <button
+            type="button"
+            onClick={() => setShowDemo((v) => !v)}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground"
+          >
+            {showDemo ? "Hide" : "Use a"} demo account (no Supabase)
+          </button>
+          {showDemo && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {DEMO_PERSONAS.map((p) => (
                 <button
                   key={p.key}
                   type="button"
-                  onClick={() => setPersona(p)}
+                  onClick={() => demoSignIn(p)}
                   className={cn(
-                    "rounded-lg border px-3 py-2 text-left text-sm transition",
-                    active ? "border-primary bg-primary/5 ring-1 ring-primary" : "border-input hover:border-muted-foreground/40",
+                    "rounded-lg border border-input px-3 py-2 text-left text-sm transition hover:border-primary",
                   )}
                 >
                   <div className="font-medium text-foreground">{p.roleLabel}</div>
                   <div className="text-xs text-muted-foreground">{p.scope}</div>
                 </button>
-              );
-            })}
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
-            No password needed for the demo — pick a role and sign in. Production uses Supabase Auth.
-          </p>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

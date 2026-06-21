@@ -45,8 +45,14 @@ export function Sidebar() {
     setPersona(getSession());
   }, []);
 
-  function signOut() {
+  async function signOut() {
     clearSession();
+    try {
+      const { getSupabase } = await import("@/lib/supabase");
+      await getSupabase()?.auth.signOut();
+    } catch {
+      /* ignore */
+    }
     router.push("/login");
   }
 
