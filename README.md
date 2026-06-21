@@ -37,6 +37,30 @@ The dashboard runs against a typed mock data layer (`apps/web/lib/mock`) shaped 
 npm run dev:api      # NestJS on :4000 (needs Supabase + Redis env, see apps/api/.env.example)
 ```
 
+## Loading the real delegate data into the deployed app (Supabase)
+
+The real rosters (`apps/web/lib/delegates.local.json`) are **gitignored** — PII never goes
+to GitHub. To make real data show on the **deployed** site, load it into Supabase (the app
+then reads it server-side; the browser never sees the service key):
+
+1. **Create a Supabase project** and open the SQL editor.
+2. **Run the migrations** in order:
+   - `supabase/migrations/0001_init.sql` (schema + RLS)
+   - `supabase/migrations/0002_seed_hierarchy.sql` (16 regions, 233 constituencies)
+3. **Seed the rosters** from your machine (regenerate the local file first if needed with
+   `python scripts/extract_delegates.py`):
+   ```bash
+   SUPABASE_URL=https://<ref>.supabase.co \
+   SUPABASE_SERVICE_ROLE_KEY=<service-role-key> \
+   node scripts/seed_supabase.mjs
+   ```
+   This upserts the regions, constituencies, and ~2,800 delegates straight into your DB.
+4. **Set the same two vars in Vercel** → Project → Settings → Environment Variables
+   (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` — *not* `NEXT_PUBLIC_*`), then redeploy.
+
+The app reads rosters from Supabase when those vars are present, and falls back to the local
+file otherwise. Call metrics / coverage / projections remain simulated until field calls begin.
+
 ## Environment
 
 See `apps/web/.env.example` and `apps/api/.env.example`. Secrets (service-account key,

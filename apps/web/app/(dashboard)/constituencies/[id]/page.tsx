@@ -29,7 +29,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
   const { constituency: c, branches, callbacks, callers, delegates } = payload;
   const reachedPct = c.kpis.delegates ? c.kpis.reached / c.kpis.delegates : 0;
   const regionName = REAL_HIERARCHY.find((r) => `r-${r.code}` === c.regionId)?.name ?? "";
-  const realDelegates = getRealDelegates(regionName, c.name);
+  const realDelegates = await getRealDelegates(regionName, c.name);
 
   return (
     <>

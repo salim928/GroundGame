@@ -1,9 +1,10 @@
 import { REAL_HIERARCHY } from "@/lib/hierarchy";
-import { getRealDelegateCount, rosterStats } from "@/lib/delegates.server";
+import { getRosterCounts, rosterKey, rosterStats } from "@/lib/delegates.server";
 import { PageHeader } from "@/components/primitives";
 import { DirectoryBrowser } from "@/components/DirectoryBrowser";
 
-export default function DirectoryPage() {
+export default async function DirectoryPage() {
+  const counts = await getRosterCounts();
   const regions = REAL_HIERARCHY.map((r) => ({
     name: r.name,
     code: r.code,
@@ -11,10 +12,10 @@ export default function DirectoryPage() {
       id: `c-${c.code}`,
       name: c.name,
       code: c.code,
-      delegates: getRealDelegateCount(r.name, c.name),
+      delegates: counts[rosterKey(r.name, c.name)] ?? 0,
     })),
   }));
-  const stats = rosterStats();
+  const stats = await rosterStats();
 
   return (
     <>
