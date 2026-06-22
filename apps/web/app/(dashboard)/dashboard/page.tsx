@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AlertTriangle, Info, OctagonAlert } from "lucide-react";
 import { data } from "@/lib/data";
 import { fmt, pct } from "@/lib/analytics";
+import { getViewerScope } from "@/lib/scope.server";
+import { REAL_HIERARCHY } from "@/lib/hierarchy";
 import { Card, ClassBadge, Kpi, PageHeader } from "@/components/primitives";
 import { SupportSpine } from "@/components/SupportSpine";
 import { ReachedChart } from "@/components/ReachedChart";
@@ -11,8 +13,21 @@ import { FieldOps, PaceCard } from "@/components/FieldOps";
 const SEV_ICON = { info: Info, warn: AlertTriangle, critical: OctagonAlert };
 const SEV_COLOR = { info: "text-sky-500", warn: "text-amber-500", critical: "text-rose-500" };
 
+function scopedHeading(scope: Awaited<ReturnType<typeof getViewerScope>>) {
+  if (scope.role === "regional_coordinator" && scope.regionCode) {
+    const r = REAL_HIERARCHY.find((x) => x.code === scope.regionCode);
+    return { title: `${r?.name ?? "Regional"} Overview`, subtitle: `Delegate outreach across ${r?.name ?? "your region"} · your assigned region` };
+  }
+  if (scope.role === "constituency_coordinator" && scope.conCode) {
+    const c = REAL_HIERARCHY.flatMap((x) => x.constituencies).find((x) => x.code === scope.conCode);
+    return { title: `${c?.name ?? "Constituency"} Overview`, subtitle: "Delegate outreach for your assigned constituency" };
+  }
+  return { title: "National Overview", subtitle: "Delegate outreach across all regions · updated continuously from the field" };
+}
+
 export default async function OverviewPage() {
-  const o = await data.overview();
+  const [o, scope] = await Promise.all([data.overview(), getViewerScope()]);
+  const heading = scopedHeading(scope);
   const funnel = [
     { stage: "Delegates", value: o.kpis.delegates },
     { stage: "Called", value: o.kpis.called },
@@ -22,10 +37,7 @@ export default async function OverviewPage() {
 
   return (
     <>
-      <PageHeader
-        title="National Overview"
-        subtitle="Delegate outreach across all regions · updated continuously from the field"
-      />
+      <PageHeader title={heading.title} subtitle={heading.subtitle} />
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi label="Delegates" value={fmt(o.kpis.delegates)} sub="across all constituencies" />

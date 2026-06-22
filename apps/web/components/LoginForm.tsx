@@ -57,13 +57,21 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
       return;
     }
     // Resolve the user's real role + scope from their profile.
-    const { data: profile } = await supa
+    const { data: profile, error: profileErr } = await supa
       .from("profiles")
       .select("role, full_name, regions(name,code), constituencies(name,code)")
       .eq("user_id", data.user.id)
-      .single();
+      .maybeSingle();
 
-    const role = ((profile?.role as Role) ?? "analyst") as Role;
+    // No profile (or it couldn't be read) → don't silently assume a role.
+    if (profileErr || !profile?.role) {
+      await supa.auth.signOut();
+      setError("No access profile is set up for this account yet. Ask an administrator to assign your role.");
+      setLoading(false);
+      return;
+    }
+
+    const role = profile.role as Role;
 
     // Strict portal check: you can only enter through your own role's door.
     if (expectedRole && role !== expectedRole) {
