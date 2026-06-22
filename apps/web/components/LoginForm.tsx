@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowRight, ChevronLeft, Loader2, Target, TriangleAlert } from "lucide-react";
-import { DEMO_PERSONAS, setSession, type DemoPersona } from "@/lib/session";
+import { setSession } from "@/lib/session";
 import { getSupabase, supabaseConfigured } from "@/lib/supabase";
 import { ROLE_HOME, ROLE_LABEL } from "@/lib/access";
 import type { Role } from "@/lib/types";
@@ -35,11 +35,6 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  const demoPersona =
-    expectedRole && expectedRole !== "caller"
-      ? DEMO_PERSONAS.find((p) => p.role === expectedRole)
-      : undefined;
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault();
@@ -102,11 +97,6 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
       conCode: conCode ?? null,
     });
     router.push(ROLE_HOME[role]);
-  }
-
-  function demoSignIn(p: DemoPersona) {
-    setSession(p);
-    router.push(ROLE_HOME[p.role]);
   }
 
   const heading = expectedRole ? `${ROLE_LABEL[expectedRole]} sign-in` : "Sign in";
@@ -188,22 +178,9 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
 
         {!supabaseConfigured && (
           <p className="mt-4 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Supabase isn't configured here, so real sign-in is unavailable.
-            {demoPersona ? " Use the demo button below." : ""}
+            Sign-in isn&apos;t configured in this environment. Set NEXT_PUBLIC_SUPABASE_URL and
+            NEXT_PUBLIC_SUPABASE_ANON_KEY.
           </p>
-        )}
-
-        {demoPersona && (
-          <div className="mt-8 border-t border-border pt-4">
-            <button
-              type="button"
-              onClick={() => demoSignIn(demoPersona)}
-              className="w-full rounded-lg border border-input px-3 py-2.5 text-left text-sm transition hover:border-primary"
-            >
-              <div className="font-medium text-foreground">Explore as a demo {ROLE_LABEL[demoPersona.role]}</div>
-              <div className="text-xs text-muted-foreground">No Supabase — {demoPersona.scope}</div>
-            </button>
-          </div>
         )}
       </div>
     </div>

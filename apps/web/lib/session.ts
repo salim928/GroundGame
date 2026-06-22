@@ -1,5 +1,6 @@
-// Lightweight demo session (client-side only). No real auth yet — this lets you
-// explore the app as different personas. Real auth swaps to Supabase Auth + JWT.
+// Client-side session snapshot. Authentication is real (Supabase Auth + JWT);
+// after sign-in we cache the resolved role/scope here for the UI, and mirror the
+// scope into a cookie so server components can scope data per request.
 import type { Role } from "./types";
 
 export interface DemoPersona {
@@ -13,14 +14,6 @@ export interface DemoPersona {
   regionCode?: string | null;
   conCode?: string | null;
 }
-
-export const DEMO_PERSONAS: DemoPersona[] = [
-  { key: "super", name: "Salim Adams", role: "super_admin", roleLabel: "Super Admin", scope: "National", email: "demo@groundgame.app" },
-  { key: "regional", name: "Efua Sarpong", role: "regional_coordinator", roleLabel: "Regional Coordinator", scope: "Greater Accra", email: "efua@groundgame.app", regionCode: "GAR" },
-  { key: "constituency", name: "Naa Adjeley", role: "constituency_coordinator", roleLabel: "Constituency Coordinator", scope: "Greater Accra · Ablekuma North", email: "naa@groundgame.app", regionCode: "GAR", conCode: "GAR03" },
-  { key: "analyst", name: "Yaw Donkor", role: "analyst", roleLabel: "Analyst", scope: "National (read-only)", email: "yaw@groundgame.app" },
-  { key: "caller", name: "Kojo Mensah", role: "caller", roleLabel: "Caller", scope: "Greater Accra · Ablekuma North", email: "kojo@groundgame.app", regionCode: "GAR", conCode: "GAR03" },
-];
 
 const KEY = "gg.session";
 
