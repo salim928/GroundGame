@@ -8,7 +8,7 @@ import { Card, ClassBadge, Kpi, PageHeader } from "@/components/primitives";
 import { SupportSpine } from "@/components/SupportSpine";
 import { ReachedChart } from "@/components/ReachedChart";
 import { FunnelBars, SupportDonut } from "@/components/charts";
-import { FieldOps, PaceCard } from "@/components/FieldOps";
+import { PaceCard } from "@/components/FieldOps";
 
 const SEV_ICON = { info: Info, warn: AlertTriangle, critical: OctagonAlert };
 const SEV_COLOR = { info: "text-sky-500", warn: "text-amber-500", critical: "text-rose-500" };
@@ -81,9 +81,8 @@ export default async function OverviewPage() {
         </Card>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <PaceCard pace={o.paceToTarget} />
-        <FieldOps sync={o.syncHealth} />
         <Card>
           <h2 className="mb-2 font-semibold text-foreground">Support composition</h2>
           <SupportDonut spine={o.spine} />

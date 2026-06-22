@@ -8,28 +8,24 @@ import {
   Map,
   BarChart3,
   PhoneCall,
-  AlertTriangle,
-  Upload,
   Users,
   ChevronLeft,
   Target,
   Menu,
   LogOut,
-  RefreshCw,
   FolderTree,
 } from "lucide-react";
 import { clearSession, getSession, type DemoPersona } from "@/lib/session";
 import { canAccess } from "@/lib/access";
 
+// Field Ops / Review queue / Import depend on the Google-Sheets sync worker,
+// which isn't deployed — hidden until it is, so the app shows only live features.
 const NAV = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard, section: "Campaign" },
   { href: "/regions", label: "Regions", icon: Map, section: "Campaign" },
   { href: "/analytics", label: "Analytics", icon: BarChart3, section: "Campaign" },
   { href: "/directory", label: "Directory", icon: FolderTree, section: "Data" },
   { href: "/callers", label: "Callers", icon: PhoneCall, section: "Data" },
-  { href: "/operations", label: "Field Ops", icon: RefreshCw, section: "Data" },
-  { href: "/conflicts", label: "Review queue", icon: AlertTriangle, section: "Data" },
-  { href: "/upload", label: "Import list", icon: Upload, section: "Manage" },
   { href: "/settings/team", label: "Team & roles", icon: Users, section: "Manage" },
 ];
 

@@ -40,8 +40,6 @@ const STAFF_VIEW = [
   "/analytics",
   "/directory",
   "/callers",
-  "/operations",
-  "/conflicts",
   "/constituencies",
 ];
 

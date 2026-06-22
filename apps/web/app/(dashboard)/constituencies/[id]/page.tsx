@@ -1,32 +1,19 @@
 import { notFound } from "next/navigation";
-import { AlertTriangle, Phone, Star } from "lucide-react";
+import { Phone, Users } from "lucide-react";
 import { data } from "@/lib/data";
 import { fmt, pct } from "@/lib/analytics";
 import { REAL_HIERARCHY } from "@/lib/hierarchy";
 import { getRealDelegates, getDelegateCalls } from "@/lib/delegates.server";
-import { Card, ClassBadge, Kpi, PageHeader, Pill } from "@/components/primitives";
+import { Card, ClassBadge, Kpi, PageHeader } from "@/components/primitives";
 import { SupportSpine } from "@/components/SupportSpine";
 import { DelegateRoster } from "@/components/DelegateRoster";
 import { BackButton } from "@/components/BackButton";
-
-const OUTCOME_TONE: Record<string, "green" | "amber" | "red" | "slate"> = {
-  supportive: "green",
-  undecided: "amber",
-  hostile: "red",
-  wrong_number: "slate",
-};
-const OUTCOME_LABEL: Record<string, string> = {
-  supportive: "Supportive",
-  undecided: "Undecided",
-  hostile: "Opposed",
-  wrong_number: "Wrong number",
-};
 
 export default async function ConstituencyPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const payload = await data.constituency(id);
   if (!payload) notFound();
-  const { constituency: c, branches, callbacks, callers, delegates } = payload;
+  const { constituency: c, branches, callbacks, callers } = payload;
   const reachedPct = c.kpis.delegates ? c.kpis.reached / c.kpis.delegates : 0;
   const regionName = REAL_HIERARCHY.find((r) => `r-${r.code}` === c.regionId)?.name ?? "";
   const realDelegates = await getRealDelegates(regionName, c.name);
@@ -144,59 +131,16 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
       )}
 
       {realDelegates.length === 0 && (
-      <Card className="mt-4">
-        <h2 className="mb-3 font-semibold text-ink">Delegates</h2>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-slate-400">
-                <th className="py-2 font-medium">Name</th>
-                <th className="py-2 font-medium">Branch</th>
-                <th className="py-2 font-medium">Type</th>
-                <th className="py-2 font-medium">Caller</th>
-                <th className="py-2 font-medium">Outcome</th>
-                <th className="py-2 font-medium">Flags</th>
-              </tr>
-            </thead>
-            <tbody>
-              {delegates.map((d) => (
-                <tr key={d.id} className="border-b border-border/60 last:border-0 hover:bg-muted/60">
-                  <td className="py-2.5">
-                    <div className="font-medium text-ink">{d.name}</div>
-                    <div className="tnum text-xs text-slate-400">{d.phone}</div>
-                  </td>
-                  <td className="py-2.5 text-slate-600">{d.branch}</td>
-                  <td className="py-2.5 text-slate-600">{d.type}</td>
-                  <td className="py-2.5 text-slate-600">{d.caller ?? "—"}</td>
-                  <td className="py-2.5">
-                    {d.outcome ? (
-                      <Pill tone={OUTCOME_TONE[d.outcome]}>{OUTCOME_LABEL[d.outcome]}</Pill>
-                    ) : d.called ? (
-                      <span className="text-xs text-slate-400">No answer</span>
-                    ) : (
-                      <span className="text-xs text-slate-300">Not called</span>
-                    )}
-                  </td>
-                  <td className="py-2.5">
-                    <div className="flex gap-1.5">
-                      {d.isInfluencer && (
-                        <span title="Influencer" className="text-amber-500">
-                          <Star size={14} fill="currentColor" />
-                        </span>
-                      )}
-                      {d.hasConflict && (
-                        <span title="Conflict — in review queue" className="text-rose-500">
-                          <AlertTriangle size={14} />
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+        <Card className="mt-4">
+          <div className="flex flex-col items-center py-12 text-center">
+            <Users className="mb-3 text-slate-300" size={32} />
+            <p className="font-medium text-ink">Roster not yet available</p>
+            <p className="mt-1 max-w-md text-sm text-slate-500">
+              The delegate list for this constituency hasn&apos;t been loaded yet. Once it&apos;s added, the executives
+              and their call status will appear here.
+            </p>
+          </div>
+        </Card>
       )}
     </>
   );
