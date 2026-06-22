@@ -15,6 +15,9 @@ export interface RealDelegate {
 type Store = Record<string, { region: string; constituency: string; delegates: RealDelegate[] }>;
 
 let cache: Promise<Store> | undefined;
+let cachedAt = 0;
+// Short TTL so newly seeded/edited delegates appear without a redeploy.
+const STORE_TTL_MS = 60_000;
 
 const keyOf = (region: string, constituency: string) => `${region}::${constituency.toLowerCase()}`;
 
@@ -77,19 +80,25 @@ function fromFile(): Store | null {
 }
 
 function getStore(): Promise<Store> {
-  if (!cache) {
+  const stale = !cache || Date.now() - cachedAt > STORE_TTL_MS;
+  if (stale) {
+    cachedAt = Date.now();
     cache = (async () => (await fromSupabase()) ?? fromFile() ?? {})();
     // Don't cache an empty result, so seeding Supabase later is picked up
-    // without a redeploy.
+    // immediately rather than after the TTL.
     cache
       .then((s) => {
-        if (Object.keys(s).length === 0) cache = undefined;
+        if (Object.keys(s).length === 0) {
+          cache = undefined;
+          cachedAt = 0;
+        }
       })
       .catch(() => {
         cache = undefined;
+        cachedAt = 0;
       });
   }
-  return cache;
+  return cache!;
 }
 
 export async function getRealDelegates(region: string, constituency: string): Promise<RealDelegate[]> {
