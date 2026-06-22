@@ -231,7 +231,21 @@ export async function analytics(): Promise<AnalyticsPayload> {
 }
 
 export async function callers(): Promise<CallerPerf[]> {
-  const stats = await getCallerStats();
+  const [allStats, scope] = await Promise.all([getCallerStats(), getViewerScope()]);
+  // Scope the performance board to the viewer's area (names, since stats carry names).
+  const regionName =
+    scope.role === "regional_coordinator" && scope.regionCode
+      ? REAL_HIERARCHY.find((r) => r.code === scope.regionCode)?.name ?? null
+      : null;
+  const conName =
+    scope.role === "constituency_coordinator" && scope.conCode
+      ? REAL_HIERARCHY.flatMap((r) => r.constituencies).find((c) => c.code === scope.conCode)?.name ?? null
+      : null;
+  const stats = allStats.filter((s) => {
+    if (conName) return s.constituency === conName;
+    if (regionName) return s.region === regionName;
+    return true; // super_admin / analyst — national
+  });
   const reachedMax = Math.max(1, ...stats.map((s) => s.reached));
   return stats
     .map((s) => {
