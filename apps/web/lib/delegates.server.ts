@@ -208,4 +208,32 @@ export async function getCallerStats(): Promise<CallerStat[]> {
   }
 }
 
+export interface DelegateCall {
+  called: boolean;
+  reached: boolean;
+  outcome: string | null;
+}
+
+/** Live call status for specific delegates (by id), straight from call_records.
+ *  Not cached, so the admin constituency view reflects callers' logging on reload. */
+export async function getDelegateCalls(ids: string[]): Promise<Record<string, DelegateCall>> {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key || ids.length === 0) return {};
+  try {
+    const inList = ids.join(",");
+    const res = await fetch(
+      `${url}/rest/v1/call_records?delegate_id=in.(${inList})&select=delegate_id,called,reached,outcome`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" },
+    );
+    if (!res.ok) return {};
+    const rows = (await res.json()) as Array<{ delegate_id: string; called: boolean; reached: boolean; outcome: string | null }>;
+    const out: Record<string, DelegateCall> = {};
+    for (const r of rows) out[r.delegate_id] = { called: r.called, reached: r.reached, outcome: r.outcome };
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export const rosterKey = keyOf;

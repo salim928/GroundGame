@@ -2,9 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { Check, Download, Loader2, Pencil, Phone, Plus, Search, Trash2, X } from "lucide-react";
-import type { RealDelegate } from "@/lib/delegates.server";
+import type { DelegateCall, RealDelegate } from "@/lib/delegates.server";
 import { getAccessToken } from "@/lib/supabase";
-import { Card } from "@/components/primitives";
+import { Card, Pill } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -22,14 +22,33 @@ const POSITIONS = [
   "Nasara Coordinator", "Deputy Nasara Coordinator", "Council of Elders",
 ];
 
+const OUTCOME_PILL: Record<string, { tone: "green" | "amber" | "red" | "slate"; label: string }> = {
+  supportive: { tone: "green", label: "Supportive" },
+  undecided: { tone: "amber", label: "Undecided" },
+  hostile: { tone: "red", label: "Opposed" },
+  wrong_number: { tone: "slate", label: "Wrong number" },
+};
+
+function CallStatus({ call }: { call?: DelegateCall }) {
+  if (!call || !call.called) return <span className="text-xs text-slate-400">Not called</span>;
+  if (!call.reached) return <Pill tone="amber">No answer</Pill>;
+  if (call.outcome && OUTCOME_PILL[call.outcome]) {
+    const o = OUTCOME_PILL[call.outcome];
+    return <Pill tone={o.tone}>{o.label}</Pill>;
+  }
+  return <Pill tone="slate">Reached</Pill>;
+}
+
 export function DelegateRoster({
   constituency,
   constituencyCode,
   initial,
+  calls = {},
 }: {
   constituency: string;
   constituencyCode: string;
   initial: RealDelegate[];
+  calls?: Record<string, DelegateCall>;
 }) {
   const [rows, setRows] = useState<Row[]>(
     initial.map((d, i) => ({ ...d, rowId: d.id ?? `local-${i}`, saved: Boolean(d.id) })),
@@ -152,6 +171,7 @@ export function DelegateRoster({
             <TableHead>Position</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Contact</TableHead>
+            <TableHead>Call status</TableHead>
             <TableHead className="w-20 text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -187,6 +207,7 @@ export function DelegateRoster({
                     className="h-8"
                   />
                 </TableCell>
+                <TableCell><CallStatus call={calls[r.rowId]} /></TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <button onClick={save} disabled={busy} className="rounded p-1.5 text-primary hover:bg-primary/10 disabled:opacity-40" title="Save">
@@ -212,6 +233,7 @@ export function DelegateRoster({
                     "—"
                   )}
                 </TableCell>
+                <TableCell><CallStatus call={calls[r.rowId]} /></TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
                     <button onClick={() => startEdit(r)} className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Edit">
@@ -227,7 +249,7 @@ export function DelegateRoster({
           )}
           {filtered.length === 0 && (
             <TableRow>
-              <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
                 No executives recorded yet. Use <span className="font-medium text-foreground">Add</span> to create one.
               </TableCell>
             </TableRow>

@@ -222,19 +222,26 @@ export default function CallerConsolePage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="font-medium text-foreground">{r.name}</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                    {r.position && <Badge variant="secondary">{r.position}</Badge>}
-                    {r.phone && (
-                      <a href={`tel:${r.phone}`} className="tnum flex items-center gap-1 text-primary hover:underline">
-                        <Phone size={12} /> {r.phone}
-                      </a>
-                    )}
-                  </div>
+                  {r.position && <Badge variant="secondary" className="mt-1">{r.position}</Badge>}
                 </div>
                 {r.saved && !r.dirty && (
                   <span className="flex items-center gap-1 text-xs text-emerald-600">
                     <CheckCircle2 size={14} /> Saved
                   </span>
+                )}
+              </div>
+
+              {/* Contact — tap to call */}
+              <div className="mt-2.5">
+                {r.phone ? (
+                  <a
+                    href={`tel:${r.phone}`}
+                    className="tnum inline-flex items-center gap-2 rounded-full bg-primary/10 px-3.5 py-1.5 text-sm font-semibold text-primary transition hover:bg-primary/15"
+                  >
+                    <Phone size={14} /> {r.phone}
+                  </a>
+                ) : (
+                  <span className="text-xs text-muted-foreground">No phone number on file</span>
                 )}
               </div>
 

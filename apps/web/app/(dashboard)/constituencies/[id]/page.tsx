@@ -3,7 +3,7 @@ import { AlertTriangle, Phone, Star } from "lucide-react";
 import { data } from "@/lib/data";
 import { fmt, pct } from "@/lib/analytics";
 import { REAL_HIERARCHY } from "@/lib/hierarchy";
-import { getRealDelegates } from "@/lib/delegates.server";
+import { getRealDelegates, getDelegateCalls } from "@/lib/delegates.server";
 import { Card, ClassBadge, Kpi, PageHeader, Pill } from "@/components/primitives";
 import { SupportSpine } from "@/components/SupportSpine";
 import { DelegateRoster } from "@/components/DelegateRoster";
@@ -30,6 +30,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
   const reachedPct = c.kpis.delegates ? c.kpis.reached / c.kpis.delegates : 0;
   const regionName = REAL_HIERARCHY.find((r) => `r-${r.code}` === c.regionId)?.name ?? "";
   const realDelegates = await getRealDelegates(regionName, c.name);
+  const callMap = await getDelegateCalls(realDelegates.map((d) => d.id).filter(Boolean) as string[]);
 
   return (
     <>
@@ -138,7 +139,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
 
       {realDelegates.length > 0 && (
         <div className="mt-4">
-          <DelegateRoster constituency={c.name} constituencyCode={c.code} initial={realDelegates} />
+          <DelegateRoster constituency={c.name} constituencyCode={c.code} initial={realDelegates} calls={callMap} />
         </div>
       )}
 
