@@ -13,7 +13,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
   const { id } = await params;
   const payload = await data.constituency(id);
   if (!payload) notFound();
-  const { constituency: c, branches, callbacks, callers } = payload;
+  const { constituency: c, callbacks, callers } = payload;
   const reachedPct = c.kpis.delegates ? c.kpis.reached / c.kpis.delegates : 0;
   const regionName = REAL_HIERARCHY.find((r) => `r-${r.code}` === c.regionId)?.name ?? "";
   const realDelegates = await getRealDelegates(regionName, c.name);
@@ -39,19 +39,9 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
         <Card className="lg:col-span-2">
           <h2 className="mb-3 font-semibold text-ink">Support readout</h2>
           <SupportSpine spine={c.spine} height={16} showLegend />
-
-          <h3 className="mb-2 mt-6 text-sm font-medium text-slate-600">Branch breakdown</h3>
-          <div className="space-y-2">
-            {branches.map((b) => (
-              <div key={b.id} className="flex items-center gap-3">
-                <div className="w-28 shrink-0 text-sm text-ink">{b.name}</div>
-                <div className="flex-1"><SupportSpine spine={b.spine} /></div>
-                <div className="tnum w-20 shrink-0 text-right text-xs text-slate-400">
-                  {b.called}/{b.delegates}
-                </div>
-              </div>
-            ))}
-          </div>
+          <p className="mt-3 text-xs text-muted-foreground">
+            Supportive · Undecided · Opposed · Not reached — updates as callers log outcomes.
+          </p>
         </Card>
 
         <div className="space-y-4">
@@ -79,9 +69,7 @@ export default async function ConstituencyPage({ params }: { params: Promise<{ i
                   <li key={cb.delegateId} className="flex items-center justify-between text-sm">
                     <div>
                       <div className="text-ink">{cb.name}</div>
-                      <div className="text-xs text-slate-400">
-                        {cb.branch} · {cb.caller}
-                      </div>
+                      <div className="text-xs text-slate-400">{cb.caller}</div>
                     </div>
                     <span className="tnum text-xs text-slate-500">{cb.callbackAt}</span>
                   </li>
