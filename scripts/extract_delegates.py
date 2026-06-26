@@ -1,6 +1,13 @@
 """Extract delegate records (position, name, contact) per constituency from the
 local "constituency conference" dataset and write apps/web/lib/delegates.local.json.
 
+Deep extraction: anchors on (position + phone). Any text unit (table row or line)
+that contains both a recognisable position and a phone number is treated as a
+delegate; the name is the best-effort remainder (kept even when the source typed
+it without spaces). The goal is to capture every number, across the many formats
+in the dataset (inline "*Pos* - Name (024 310 8820)", NAME/POSITION/CONTACT
+columns, PDF tables with concatenated names, wrapped phones, etc.).
+
 That output is GITIGNORED — it contains PII (names + phone numbers) and must never
 be committed. The app reads it at runtime on the server only.
 
@@ -44,33 +51,48 @@ def clean_constituency(filename: str) -> str:
     n = re.sub(r"\s{2,}", " ", n).strip()
     return " ".join(w[:1].upper() + w[1:].lower() if w else w for w in n.split(" "))
 
-# Position canonicalisation — order matters (deputy/vice variants first).
+# Position canonicalisation — order matters (deputy/vice variants first; the bare
+# "chair" pattern must stay last so "Zongo Caucus Chairman" classifies correctly).
 POSITION_PATTERNS = [
     (r"vice[\s-]*chair(?:man|person)?", "Vice Chairman"),
-    (r"deputy\s*secretary", "Deputy Secretary"),
-    (r"deputy\s*treasurer", "Deputy Treasurer"),
-    (r"deputy\s*(women'?s?)\s*organi[sz]er", "Deputy Women's Organizer"),
-    (r"deputy\s*youth\s*organi[sz]er", "Deputy Youth Organizer"),
-    (r"deputy\s*nasara", "Deputy Nasara Coordinator"),
-    (r"deputy\s*organi[sz]er", "Deputy Organizer"),
-    (r"deputy\s*comm", "Deputy Communications Officer"),
-    (r"(women'?s?)\s*organi[sz]er", "Women's Organizer"),
+    (r"(?:deputy|dep\.?)\s*secretary", "Deputy Secretary"),
+    (r"(?:deputy|dep\.?)\s*treasurer", "Deputy Treasurer"),
+    (r"(?:deputy|dep\.?)\s*(?:women'?s?)\s*organi[sz]er", "Deputy Women's Organizer"),
+    (r"(?:deputy|dep\.?)\s*youth\s*organi[sz]er", "Deputy Youth Organizer"),
+    (r"(?:deputy|dep\.?)\s*nasara", "Deputy Nasara Coordinator"),
+    (r"(?:deputy|dep\.?)\s*organi[sz]er", "Deputy Organizer"),
+    (r"(?:deputy|dep\.?)\s*comm\w*", "Deputy Communications Officer"),
+    (r"(?:women'?s?)\s*organi[sz]er", "Women's Organizer"),
     (r"youth\s*organi[sz]er", "Youth Organizer"),
     (r"nasara\s*(coordinator|organi[sz]er|coordinater)", "Nasara Coordinator"),
     (r"comm\w*\s*officer", "Communications Officer"),
     (r"\borgani[sz]er\b", "Organizer"),
     (r"\bsecretary\b", "Secretary"),
     (r"\btreasurer\b", "Treasurer"),
-    (r"council\s*of\s*elders", "Council of Elders"),
-    (r"\bchair(man|person)?\b", "Chairman"),
+    (r"zongo\s*caucus(?:\s*chair(?:man|person)?)?", "Zongo Caucus"),
+    (r"executive\s*member", "Executive Member"),
+    (r"council\s*(?:of\s*elders|member)", "Council of Elders"),
+    (r"\bchair(?:man|person)?\b", "Chairman"),
 ]
 POSITION_RE = [(re.compile(p, re.I), c) for p, c in POSITION_PATTERNS]
 
+# Phone normalisation: collapse spaces/dots/dashes inside a 0XXXXXXXXX number so
+# "024 310 8820" and "024.310.8820" become "0243108820".
+PHONE_COMPRESS = re.compile(r"0(?:[ .\-]?\d){9}(?!\d)")
+def normalize_phones(text: str) -> str:
+    return PHONE_COMPRESS.sub(lambda m: re.sub(r"[ .\-]", "", m.group(0)), text)
+
 PHONE_RE = re.compile(r"(?<!\d)(0\d{9})(?!\d)")
-NON_NAME = re.compile(
-    r"elected|unopposed|votes|position|^name$|constituency|region|^no$|s/?no|contact|"
-    r"telephone|phone|number|chairman|secretary|treasurer|organi|nasara|officer|"
-    r"national|democratic|congress|executive|deputy|vice|women|youth|elders|^\d",
+def first_phone(text: str):
+    m = PHONE_RE.search(text)
+    return m.group(1) if m else None
+
+# Words that are never part of a personal name (stripped when cleaning a name).
+JUNK_WORDS = re.compile(
+    r"\b(elected|unopposed|votes?|contesting|positions?|portfolios?|numbers?|members?|"
+    r"caucus|zongo|executive|council|elders|telephone|contact|name|no|nan|none|"
+    r"constituency|congress|democratic|national|deputy|dep|asst|assistant|officer|"
+    r"vice|new|old)\b",
     re.I,
 )
 
@@ -80,20 +102,30 @@ def canon_position(text):
             return canon
     return None
 
-def is_name(text):
-    t = text.strip()
-    if not (4 <= len(t) <= 40):
-        return False
-    if NON_NAME.search(t):
-        return False
-    tokens = [w for w in re.split(r"\s+", t) if w]
-    if not (2 <= len(tokens) <= 5):
-        return False
-    return all(re.match(r"^[A-Za-z][A-Za-z.'\-]*$", w) for w in tokens)
+def clean_name(text):
+    # Strip ID/party codes, phone digits and serials (e.g. "F200060091", "0243...").
+    s = re.sub(r"\b[A-Za-z]{0,2}\d{3,}[\w./-]*", " ", text)
+    for rx, _ in POSITION_RE:
+        s = rx.sub(" ", s)
+    s = JUNK_WORDS.sub(" ", s)
+    s = re.sub(r"[^A-Za-z.'\- ]", " ", s)
+    s = re.sub(r"\s{2,}", " ", s).strip(" .-'")
+    return s if len(s) >= 2 else ""
 
-def phone_in(text):
-    m = PHONE_RE.search(re.sub(r"[\s-]", "", text))
-    return m.group(1) if m else None
+# A plausible personal name (allows a single concatenated token like "PROSPERAKAMANI").
+NON_NAME = re.compile(r"position|contact|telephone|number|officer|name of|s/?n|^no$|elected", re.I)
+def is_name(t):
+    t = (t or "").strip()
+    if not (3 <= len(t) <= 45) or NON_NAME.search(t):
+        return False
+    toks = [w for w in t.split() if w]
+    if not (1 <= len(toks) <= 6):
+        return False
+    if not all(re.match(r"^[A-Za-z][A-Za-z.'\-]*$", w) for w in toks):
+        return False
+    if len(toks) == 1 and len(toks[0]) < 5:  # a lone short word is probably junk
+        return False
+    return True
 
 def title_name(s):
     return " ".join(w.capitalize() for w in s.split())
@@ -108,7 +140,6 @@ def docx_tables_and_text(path):
             cells = [" ".join(t.text or "" for t in tc.iter(W + "t")).strip() for tc in tr.iter(W + "tc")]
             rows.append(cells)
         tables.append(rows)
-    # plain text grouped into lines by paragraph
     lines = []
     for p in root.iter(W + "p"):
         txt = "".join(t.text or "" for t in p.iter(W + "t")).strip()
@@ -116,12 +147,26 @@ def docx_tables_and_text(path):
             lines.append(txt)
     return tables, lines
 
+def _xlsx_cell(c):
+    if c is None:
+        return ""
+    s = str(c).strip()
+    # Excel often stores a phone as a number, dropping the leading 0: "540377751.0".
+    m = re.fullmatch(r"(\d{9,10})\.0", s)
+    if m:
+        d = m.group(1)
+        if len(d) == 9:
+            return "0" + d
+        if len(d) == 10 and d[0] == "0":
+            return d
+    return s
+
 def xlsx_tables(path):
     wb = openpyxl.load_workbook(path, data_only=True, read_only=True)
     rows = []
     for ws in wb.worksheets:
         for r in ws.iter_rows(values_only=True):
-            rows.append(["" if c is None else str(c).strip() for c in r])
+            rows.append([_xlsx_cell(c) for c in r])
     return [rows], []
 
 def pdf_lines(path):
@@ -137,24 +182,6 @@ def pdf_lines(path):
         return [], []
 
 # ---- delegate parsing --------------------------------------------------------
-def from_tables(tables):
-    out = []
-    for rows in tables:
-        for cells in rows:
-            joined = " ".join(cells)
-            pos = None
-            for c in cells:
-                pos = canon_position(c)
-                if pos:
-                    break
-            if not pos:
-                continue
-            name = next((c for c in cells if is_name(c)), None)
-            if not name:
-                continue
-            out.append({"position": pos, "name": title_name(name), "contact": phone_in(joined)})
-    return out
-
 # Lines that end on a wrapped position fragment (e.g. "Communication" / "Officer").
 FRAG_RE = re.compile(r"(communication|deputy|women|youth|nasara|council of|dep\.?|vice|other)\s*$", re.I)
 
@@ -169,42 +196,61 @@ def merge_fragments(lines):
         i += 1
     return out
 
-def name_from(body):
-    s = body
-    for rx, _ in POSITION_RE:
-        s = rx.sub(" ", s)
-    s = re.sub(r"\b(elected|unopposed|votes?|contesting|positions?|member|caucus|zongo|other)\b", " ", s, flags=re.I)
-    s = re.sub(r"[^A-Za-z.'\- ]", " ", s)
-    return re.sub(r"\s{2,}", " ", s).strip()
-
-def from_text(lines):
-    """State machine that handles inline rows (pos+name+phone on one line),
-    vertical columns (pos / no / name / phone), and wrapped positions."""
-    lines = merge_fragments([l.strip() for l in lines if l.strip()])
+def from_units(units, require_phone=True):
+    """State machine over text units. A delegate is emitted when we have a
+    position plus a phone (same unit or paired across wrapped units). For
+    structured tables (require_phone=False) a position + a clear name also counts
+    even when the phone column is blank. Names are kept even if concatenated."""
     out = []
-    pend_pos = pend_phone = None
-    for ln in lines:
-        phone = phone_in(ln)
-        body = re.sub(r"^\s*\d{1,3}[.)]?\s*", "", PHONE_RE.sub(" ", ln))  # drop phone + numbering
-        pos = canon_position(body)
-        nm = name_from(body)
-        named = is_name(nm)
-        if pos and named:
-            out.append({"position": pos, "name": title_name(nm), "contact": phone})
-            pend_pos = pend_phone = None
+    pend = None  # {"pos", "name", "phone"}
+
+    def emit(pos, name, phone):
+        out.append({"position": pos, "name": title_name(name) if name else "", "contact": phone})
+
+    def flush():
+        nonlocal pend
+        if pend and pend["pos"] and (pend["phone"] or (not require_phone and is_name(pend["name"]))):
+            emit(pend["pos"], pend["name"], pend["phone"])
+        pend = None
+
+    for raw in units:
+        u = normalize_phones(raw)
+        pos = canon_position(u)
+        phone = first_phone(u)
+        name = clean_name(u)
+        if pos and phone:
+            flush()
+            emit(pos, name, phone)
+        elif pos and not require_phone and is_name(name):
+            flush()
+            emit(pos, name, None)  # structured row with a name but no phone column
         elif pos:
-            pend_pos, pend_phone = pos, phone or pend_phone
-        elif named and pend_pos:
-            out.append({"position": pend_pos, "name": title_name(nm), "contact": phone or pend_phone})
-            pend_pos = pend_phone = None
-        elif phone and pend_pos:
-            pend_phone = phone
+            flush()
+            pend = {"pos": pos, "name": name, "phone": None}
+        elif phone:
+            if pend and pend["pos"]:
+                pend["phone"] = phone
+                if not pend["name"] and name:
+                    pend["name"] = name
+                flush()
+        elif name and pend and not pend["name"]:
+            pend["name"] = name
+    flush()
     return out
+
+def units_from_tables(tables):
+    units = []
+    for rows in tables:
+        for cells in rows:
+            joined = " ".join(c for c in cells if c).strip()
+            if joined:
+                units.append(joined)
+    return units
 
 def dedupe(dels):
     seen, out = set(), []
     for d in dels:
-        key = (d["position"], d["name"])
+        key = (d["position"], d["name"], d["contact"])
         if key in seen:
             continue
         seen.add(key)
@@ -214,14 +260,13 @@ def dedupe(dels):
 # --- combined single-document regions (Bono, Upper West) -----------------------
 POS_BREAK = re.compile(
     r"(?=(?:Chairman|Vice\s*Chair|Secretary|Deputy|Treasurer|Organi[sz]er|Communication|"
-    r"Women|Youth|Nasara|Council))",
+    r"Women|Youth|Nasara|Council|Zongo|Executive))",
     re.I,
 )
 
 def blob_to_lines(seg):
     return [x for x in POS_BREAK.sub("\n", seg).splitlines() if x.strip()]
 
-# Anchor (uppercase as found in the doc) -> hierarchy constituency name.
 UPPER_WEST_ANCHORS = {
     "WA CENTRAL": "Wa Central", "WA EAST": "Wa East", "WA WEST": "Wa West", "JIRAPA": "Jirapa",
     "LAWRA": "Lawra", "LAMBUSSIE": "Lambussie Karni", "NANDOM": "Nandom",
@@ -238,11 +283,11 @@ BONO_ANCHORS = {
 BONO_ROW = re.compile(r"([A-Z][A-Z.]+(?:\s+[A-Z][A-Z.]+){0,3})\s+ELECTED\s+([A-Z]+(?:\s+[A-Z]+)?)\s+(0\d{9})")
 
 def parse_combined(text, anchors):
-    # Split the blob at each constituency anchor, keeping order.
+    text = re.sub(r"\s+", " ", text)  # collapse runs of spaces so anchors match (e.g. "DORMAA  WEST")
     keys = sorted(anchors, key=len, reverse=True)
     rx = re.compile(r"(" + "|".join(re.escape(k) for k in keys) + r")")
     parts = rx.split(text)
-    out = {}  # constituency -> [delegates]
+    out = {}
     current = None
     for piece in parts:
         up = piece.strip().upper()
@@ -252,13 +297,17 @@ def parse_combined(text, anchors):
             continue
         if not current:
             continue
+        dels = []
         if "ELECTED" in piece:  # Bono style: NAME ELECTED POSITION PHONE
-            for nm, pos_raw, phone in BONO_ROW.findall(piece):
+            for nm, pos_raw, phone in BONO_ROW.findall(normalize_phones(piece)):
                 pos = canon_position(pos_raw)
-                if pos and is_name(name_from(nm)):
-                    out[current].append({"position": pos, "name": title_name(name_from(nm)), "contact": phone})
-        else:  # Upper West style: POSITION NAME PHONE
-            out[current].extend(from_text(blob_to_lines(piece)))
+                if pos:
+                    dels.append({"position": pos, "name": title_name(clean_name(nm)), "contact": phone})
+        # Always also try the generic parser, keep whichever is richer.
+        alt = from_units(blob_to_lines(piece))
+        if len(alt) > len(dels):
+            dels = alt
+        out[current].extend(dels)
     return {k: dedupe(v) for k, v in out.items() if v}
 
 def read_any_text(path, ext):
@@ -278,7 +327,6 @@ def main():
             continue
         region = REGION_META.get(region_dir, region_dir.title())
 
-        # Combined single-document regions: one doc holds every constituency.
         anchors = UPPER_WEST_ANCHORS if region_dir == "UPPER WEST" else BONO_ANCHORS if region_dir == "BONO" else None
         if anchors:
             for fn in sorted(os.listdir(full)):
@@ -320,11 +368,9 @@ def main():
                     tables, lines = [], []
             except Exception:
                 tables, lines = [], []
-            dels = from_tables(tables)
-            if len(dels) < 5:  # tables thin -> try text, keep whichever is richer
-                alt = from_text(lines)
-                if len(alt) > len(dels):
-                    dels = alt
+            dels_t = from_units(units_from_tables(tables), require_phone=False)
+            dels_x = from_units(merge_fragments(lines), require_phone=True)
+            dels = dels_t if len(dels_t) >= len(dels_x) else dels_x
             dels = dedupe(dels)
             key = f"{region}::{con.lower()}"
             if dels:

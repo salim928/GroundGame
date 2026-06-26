@@ -44,6 +44,11 @@ on conflict (external_ref) do nothing;`,
 const sql = `-- AUTO-GENERATED delegate roster seed (PII) — do NOT commit.
 -- Prereq: run 0001_init.sql and 0002_seed_hierarchy.sql first.
 -- ${rows.length} delegates across the seeded constituencies.
+--
+-- CLEAN RELOAD: this clears the existing roster first so the upload is exact
+-- (no stale rows from a previous, smaller extraction). NOTE: deleting delegates
+-- cascades to call_records, so any logged test calls are cleared too.
+delete from delegates;
 
 ${body}
 `;
