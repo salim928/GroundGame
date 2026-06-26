@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Download, Loader2, Pencil, Phone, Plus, Search, Trash2, X } from "lucide-react";
 import type { DelegateCall, RealDelegate } from "@/lib/delegates.server";
 import { getAccessToken } from "@/lib/supabase";
+import { getSession } from "@/lib/session";
+import { canEditDelegates } from "@/lib/access";
 import { Card, Pill } from "@/components/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -58,6 +60,11 @@ export function DelegateRoster({
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [canEdit, setCanEdit] = useState(false);
+
+  useEffect(() => {
+    setCanEdit(canEditDelegates(getSession()?.role));
+  }, []);
 
   const filtered = useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -157,9 +164,11 @@ export function DelegateRoster({
           <Button variant="outline" size="sm" onClick={exportCsv}>
             <Download /> CSV
           </Button>
-          <Button size="sm" onClick={add}>
-            <Plus /> Add
-          </Button>
+          {canEdit && (
+            <Button size="sm" onClick={add}>
+              <Plus /> Add
+            </Button>
+          )}
         </div>
       </div>
 
@@ -172,7 +181,7 @@ export function DelegateRoster({
             <TableHead>Name</TableHead>
             <TableHead>Contact</TableHead>
             <TableHead>Call status</TableHead>
-            <TableHead className="w-20 text-right">Actions</TableHead>
+            {canEdit && <TableHead className="w-20 text-right">Actions</TableHead>}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -234,16 +243,18 @@ export function DelegateRoster({
                   )}
                 </TableCell>
                 <TableCell><CallStatus call={calls[r.rowId]} /></TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
-                    <button onClick={() => startEdit(r)} className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Edit">
-                      <Pencil size={15} />
-                    </button>
-                    <button onClick={() => remove(r)} className="rounded p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600" title="Delete">
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </TableCell>
+                {canEdit && (
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <button onClick={() => startEdit(r)} className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" title="Edit">
+                        <Pencil size={15} />
+                      </button>
+                      <button onClick={() => remove(r)} className="rounded p-1.5 text-muted-foreground hover:bg-rose-50 hover:text-rose-600" title="Delete">
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </TableCell>
+                )}
               </TableRow>
             ),
           )}
@@ -256,9 +267,11 @@ export function DelegateRoster({
           )}
         </TableBody>
       </Table>
-      <p className="px-5 py-3 text-xs text-muted-foreground">
-        Changes save to the database for signed-in coordinators with access to this constituency.
-      </p>
+      {canEdit && (
+        <p className="px-5 py-3 text-xs text-muted-foreground">
+          Changes save to the database for coordinators with access to this constituency.
+        </p>
+      )}
     </Card>
   );
 }

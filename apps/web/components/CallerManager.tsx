@@ -44,9 +44,14 @@ export function CallerManager() {
   const [email, setEmail] = useState("");
   const [regionCode, setRegionCode] = useState(REAL_HIERARCHY[0].code);
   const [conCode, setConCode] = useState(REAL_HIERARCHY[0].constituencies[0].code);
+  const [lockRegion, setLockRegion] = useState(false);
+  const [lockCon, setLockCon] = useState(false);
 
   const region = useMemo(() => REAL_HIERARCHY.find((r) => r.code === regionCode)!, [regionCode]);
   const canManage = role !== null && MANAGER_ROLES.includes(role);
+  // Constrain the add-form to the manager's own area (server enforces this too).
+  const regionOptions = lockRegion ? REAL_HIERARCHY.filter((r) => r.code === regionCode) : REAL_HIERARCHY;
+  const conOptions = lockCon ? region.constituencies.filter((c) => c.code === conCode) : region.constituencies;
 
   async function refresh() {
     const token = await getAccessToken();
@@ -64,7 +69,26 @@ export function CallerManager() {
   }
 
   useEffect(() => {
-    setRole(getSession()?.role ?? null);
+    const s = getSession();
+    setRole(s?.role ?? null);
+    // Pre-scope the form: constituency coordinators are locked to their one
+    // constituency; regional coordinators to their region.
+    if (s?.conCode) {
+      const reg = REAL_HIERARCHY.find((r) => r.constituencies.some((c) => c.code === s.conCode));
+      if (reg) {
+        setRegionCode(reg.code);
+        setConCode(s.conCode);
+        setLockRegion(true);
+        setLockCon(true);
+      }
+    } else if (s?.regionCode) {
+      const reg = REAL_HIERARCHY.find((r) => r.code === s.regionCode);
+      if (reg) {
+        setRegionCode(reg.code);
+        setConCode(reg.constituencies[0].code);
+        setLockRegion(true);
+      }
+    }
     refresh();
   }, []);
 
@@ -159,14 +183,15 @@ export function CallerManager() {
             <select
               id="cf-region"
               value={regionCode}
+              disabled={lockRegion}
               onChange={(e) => {
                 setRegionCode(e.target.value);
                 const r = REAL_HIERARCHY.find((x) => x.code === e.target.value)!;
                 setConCode(r.constituencies[0].code);
               }}
-              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm disabled:opacity-70"
             >
-              {REAL_HIERARCHY.map((r) => (
+              {regionOptions.map((r) => (
                 <option key={r.code} value={r.code}>{r.name}</option>
               ))}
             </select>
@@ -176,10 +201,11 @@ export function CallerManager() {
             <select
               id="cf-con"
               value={conCode}
+              disabled={lockCon}
               onChange={(e) => setConCode(e.target.value)}
-              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm"
+              className="h-10 w-full rounded-md border border-input bg-card px-3 text-sm disabled:opacity-70"
             >
-              {region.constituencies.map((c) => (
+              {conOptions.map((c) => (
                 <option key={c.code} value={c.code}>{c.name}</option>
               ))}
             </select>

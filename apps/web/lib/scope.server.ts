@@ -29,16 +29,20 @@ export async function getViewerScope(): Promise<ViewerScope> {
 
 type Hierarchy = typeof REAL_HIERARCHY;
 
-/** Narrow the hierarchy to the viewer's area. Region coords get their region;
- *  constituency coords get just their constituency; everyone else gets all. */
+/** Narrow the hierarchy to the viewer's assigned area. Driven by the assigned
+ *  codes, not the role name, so every non-super role respects its scope: a
+ *  constituency assignment shows just that constituency, a region assignment
+ *  shows that region (covers regional coordinators AND a region-scoped analyst),
+ *  and an unassigned/national user (super admin, national analyst) sees all. */
 export function scopeHierarchy(hierarchy: Hierarchy, scope: ViewerScope): Hierarchy {
-  if (scope.role === "regional_coordinator" && scope.regionCode) {
-    return hierarchy.filter((r) => r.code === scope.regionCode);
-  }
-  if (scope.role === "constituency_coordinator" && scope.conCode) {
+  if (scope.role === "super_admin") return hierarchy;
+  if (scope.conCode) {
     return hierarchy
       .filter((r) => r.constituencies.some((c) => c.code === scope.conCode))
       .map((r) => ({ ...r, constituencies: r.constituencies.filter((c) => c.code === scope.conCode) }));
+  }
+  if (scope.regionCode) {
+    return hierarchy.filter((r) => r.code === scope.regionCode);
   }
   return hierarchy;
 }

@@ -64,3 +64,14 @@ export const CALLER_MANAGER_ROLES: Role[] = [
   "regional_coordinator",
   "constituency_coordinator",
 ];
+
+/** Roles allowed to add/edit/delete delegates (analyst + caller are read-only). */
+export const DELEGATE_EDITOR_ROLES: Role[] = [
+  "super_admin",
+  "regional_coordinator",
+  "constituency_coordinator",
+];
+
+export function canEditDelegates(role: Role | null | undefined): boolean {
+  return !!role && DELEGATE_EDITOR_ROLES.includes(role);
+}

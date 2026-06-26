@@ -14,13 +14,13 @@ const SEV_ICON = { info: Info, warn: AlertTriangle, critical: OctagonAlert };
 const SEV_COLOR = { info: "text-sky-500", warn: "text-amber-500", critical: "text-rose-500" };
 
 function scopedHeading(scope: Awaited<ReturnType<typeof getViewerScope>>) {
-  if (scope.role === "regional_coordinator" && scope.regionCode) {
-    const r = REAL_HIERARCHY.find((x) => x.code === scope.regionCode);
-    return { title: `${r?.name ?? "Regional"} Overview`, subtitle: `Delegate outreach across ${r?.name ?? "your region"} · your assigned region` };
-  }
-  if (scope.role === "constituency_coordinator" && scope.conCode) {
+  if (scope.role !== "super_admin" && scope.conCode) {
     const c = REAL_HIERARCHY.flatMap((x) => x.constituencies).find((x) => x.code === scope.conCode);
     return { title: `${c?.name ?? "Constituency"} Overview`, subtitle: "Delegate outreach for your assigned constituency" };
+  }
+  if (scope.role !== "super_admin" && scope.regionCode) {
+    const r = REAL_HIERARCHY.find((x) => x.code === scope.regionCode);
+    return { title: `${r?.name ?? "Regional"} Overview`, subtitle: `Delegate outreach across ${r?.name ?? "your region"} · your assigned region` };
   }
   return { title: "National Overview", subtitle: "Delegate outreach across all regions · updated continuously from the field" };
 }
