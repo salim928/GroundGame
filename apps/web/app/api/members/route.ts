@@ -45,6 +45,7 @@ export async function POST(req: Request) {
   const { me, error } = await requireSuper(req);
   if (error) return error;
   void me;
+  try {
   const body = (await req.json().catch(() => null)) as
     | { fullName?: string; email?: string; password?: string; role?: string; regionCode?: string; constituencyCode?: string }
     | null;
@@ -76,10 +77,8 @@ export async function POST(req: Request) {
     });
     userId = user.id;
   } catch (e) {
-    if (!/already|registered|exists/i.test(String(e))) {
-      return NextResponse.json({ error: "Could not create the login." }, { status: 500 });
-    }
-    const list = await adminRest<{ users?: any[] }>("/auth/v1/admin/users?per_page=200");
+    if (!/already|registered|exists/i.test(String(e))) throw e;
+    const list = await adminRest<{ users?: any[] }>("/auth/v1/admin/users?per_page=1000");
     const found = (list.users ?? []).find((u: any) => u.email === body.email!.trim());
     if (!found) return NextResponse.json({ error: "Email in use but unresolved." }, { status: 409 });
     userId = found.id;
@@ -99,6 +98,9 @@ export async function POST(req: Request) {
     }),
   });
   return NextResponse.json({ ok: true, userId });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+  }
 }
 
 // DELETE — deactivate a staff member.
