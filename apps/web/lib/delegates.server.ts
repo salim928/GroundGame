@@ -272,6 +272,44 @@ export async function getDelegateCalls(ids: string[]): Promise<Record<string, De
   }
 }
 
+export interface CallActivity {
+  reached: boolean;
+  outcome: string | null;
+  updatedAt: string | null;
+  position: string | null;
+  region: string;
+  constituency: string;
+}
+
+/** Raw reached/outcome call records with their date + delegate position, for the
+ *  time-series (reached-per-day) and segment (executive engagement) views. */
+export async function getCallActivity(): Promise<CallActivity[]> {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  try {
+    const rows = await fetchAllRows<{
+      reached: boolean;
+      outcome: string | null;
+      updated_at: string | null;
+      delegates: { position: string | null; constituencies: { name: string; regions: { name: string } | null } | null } | null;
+    }>(
+      `${url}/rest/v1/call_records?select=reached,outcome,updated_at,delegates(position,constituencies(name,regions(name)))&order=id`,
+      { apikey: key, Authorization: `Bearer ${key}` },
+    );
+    return rows.map((r) => ({
+      reached: r.reached,
+      outcome: r.outcome,
+      updatedAt: r.updated_at,
+      position: r.delegates?.position ?? null,
+      region: r.delegates?.constituencies?.regions?.name ?? "",
+      constituency: r.delegates?.constituencies?.name ?? "",
+    }));
+  } catch {
+    return [];
+  }
+}
+
 /** Active caller full-names per constituency (region::constituency -> names),
  *  read from profiles. Lets the dashboard show who's assigned where. */
 export async function getCallerDirectory(): Promise<Record<string, string[]>> {

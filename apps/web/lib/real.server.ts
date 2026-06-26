@@ -6,12 +6,14 @@ import { REAL_HIERARCHY } from "./hierarchy";
 import {
   getAllDelegates,
   getCallStats,
+  getCallActivity,
   getCallerStats,
   getCallerDirectory,
   getRealDelegates,
   getRosterCounts,
   rosterKey,
   type CallStat,
+  type CallActivity,
 } from "./delegates.server";
 import { addSpines, classify, projectShare } from "./analytics";
 import { getViewerScope, scopeHierarchy } from "./scope.server";
@@ -22,6 +24,7 @@ import type {
   Conflict,
   ConstituencyPayload,
   ConstituencyRollup,
+  DailyReached,
   Kpis,
   OverviewPayload,
   RegionPayload,
@@ -99,19 +102,40 @@ async function build() {
   return regions;
 }
 
-async function segments(): Promise<SegmentEngagement[]> {
-  const all = await getAllDelegates();
-  const group = (re: RegExp) => all.filter((d) => re.test(d.position)).length;
+// Reached-per-day for the last 14 days, from call_records timestamps.
+function dailyReachedFrom(activity: CallActivity[]): DailyReached[] {
+  const byDay: Record<string, number> = {};
+  for (const a of activity) {
+    if (!a.reached || !a.updatedAt) continue;
+    const day = a.updatedAt.slice(0, 10);
+    byDay[day] = (byDay[day] ?? 0) + 1;
+  }
+  const out: DailyReached[] = [];
+  const today = new Date();
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(today);
+    d.setUTCDate(today.getUTCDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    out.push({ date: key, reached: byDay[key] ?? 0 });
+  }
+  return out;
+}
+
+async function segments(activity?: CallActivity[]): Promise<SegmentEngagement[]> {
+  const [all, act] = await Promise.all([getAllDelegates(), activity ? Promise.resolve(activity) : getCallActivity()]);
+  const total = (re: RegExp) => all.filter((d) => re.test(d.position)).length;
+  const reached = (re: RegExp) => act.filter((a) => a.reached && a.position && re.test(a.position)).length;
+  const seg = (segment: SegmentEngagement["segment"], label: string, re: RegExp) => ({ segment, label, total: total(re), reached: reached(re) });
   return [
-    { segment: "current_exec", label: "Chairmen & Vice", total: group(/chair/i), reached: 0 },
-    { segment: "former_exec", label: "Secretaries", total: group(/secretary/i), reached: 0 },
-    { segment: "aspiring_exec", label: "Organizers", total: group(/organi/i), reached: 0 },
-    { segment: "influencer", label: "Treasurers & Comms", total: group(/treasurer|communication/i), reached: 0 },
+    seg("current_exec", "Chairmen & Vice", /chair/i),
+    seg("former_exec", "Secretaries", /secretary/i),
+    seg("aspiring_exec", "Organizers", /organi/i),
+    seg("influencer", "Treasurers & Comms", /treasurer|communication/i),
   ];
 }
 
 export async function overview(): Promise<OverviewPayload> {
-  const regions = await build();
+  const [regions, activity] = await Promise.all([build(), getCallActivity()]);
   const allCons = regions.flatMap((r) => r.constituencies);
   const national = aggregate(allCons);
   const delegates = national.kpis.delegates;
@@ -120,11 +144,14 @@ export async function overview(): Promise<OverviewPayload> {
   const totalCons = regions.reduce((s, r) => s + r.constituencies.length, 0);
   const noRoster = totalCons - withRoster;
   const daysLeft = 21;
+  const dailyReached = dailyReachedFrom(activity);
+  const reachedPerDay = Math.round(dailyReached.reduce((s, d) => s + d.reached, 0) / dailyReached.length);
+  const requiredPerDay = Math.ceil(Math.max(0, delegates - reached) / daysLeft);
 
   return {
     kpis: national.kpis,
     spine: national.spine,
-    dailyReached: [],
+    dailyReached,
     alerts: [
       ...(reached === 0
         ? [{ id: "calls", kind: "stale_data" as const, severity: "info" as const, message: "Field calls not started — metrics populate as callers log outcomes", scope: "National" }]
@@ -134,15 +161,15 @@ export async function overview(): Promise<OverviewPayload> {
         : []),
     ],
     regions: regions.map((r) => r.rollup),
-    segments: await segments(),
+    segments: await segments(activity),
     syncHealth: { lastSyncMins: -1, sheetsSynced: 0, sheetsTotal: totalCons, conflictsOpen: 0, staleSheets: 0 },
     paceToTarget: {
       reachedToTarget: delegates ? reached / delegates : 0,
       target: delegates,
       daysLeft,
-      reachedPerDay: 0,
-      requiredPerDay: Math.ceil(Math.max(0, delegates - reached) / daysLeft),
-      onPace: false,
+      reachedPerDay,
+      requiredPerDay,
+      onPace: reachedPerDay >= requiredPerDay && reached > 0,
     },
     trends: { coverage: 0, reached: 0, support: 0, delegates: 0 },
   };
@@ -209,7 +236,7 @@ export async function constituency(id: string): Promise<ConstituencyPayload | nu
 }
 
 export async function analytics(): Promise<AnalyticsPayload> {
-  const regs = await build();
+  const [regs, activity] = await Promise.all([build(), getCallActivity()]);
   const cons = regs.flatMap((r) => r.constituencies);
   const national = aggregate(cons);
   const priority = cons
@@ -246,8 +273,8 @@ export async function analytics(): Promise<AnalyticsPayload> {
     regions: regs.map((r) => ({ name: r.rollup.name, code: r.rollup.code, coverage: r.rollup.kpis.coverage, delegates: r.rollup.kpis.delegates })),
     classDistribution,
     priority,
-    segments: await segments(),
-    dailyReached: [],
+    segments: await segments(activity),
+    dailyReached: dailyReachedFrom(activity),
     supportRate: national.kpis.reached ? national.spine.supportive / national.kpis.reached : 0,
     reachRate: national.kpis.called ? national.kpis.reached / national.kpis.called : 0,
   };
