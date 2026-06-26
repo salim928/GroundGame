@@ -8,7 +8,7 @@ export default async function ConflictsPage() {
     <>
       <PageHeader
         title="Review queue"
-        subtitle="Two mutually-exclusive outcomes were ticked. The sync never guesses — set the true outcome here."
+        subtitle="Potential duplicate delegates in your area — same phone number or identical name. Open the constituency to deactivate the extra entry."
       />
       <ConflictQueue initial={conflicts} />
     </>

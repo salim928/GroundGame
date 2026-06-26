@@ -15,6 +15,7 @@ import {
   LogOut,
   FolderTree,
   KeyRound,
+  AlertTriangle,
 } from "lucide-react";
 import { clearSession, getSession, type DemoPersona } from "@/lib/session";
 import { canAccess } from "@/lib/access";
@@ -27,6 +28,7 @@ const NAV = [
   { href: "/analytics", label: "Analytics", icon: BarChart3, section: "Campaign" },
   { href: "/directory", label: "Directory", icon: FolderTree, section: "Data" },
   { href: "/callers", label: "Callers", icon: PhoneCall, section: "Data" },
+  { href: "/conflicts", label: "Review queue", icon: AlertTriangle, section: "Data" },
   { href: "/settings/team", label: "Team & roles", icon: Users, section: "Manage" },
   { href: "/settings/account", label: "Account", icon: KeyRound, section: "Manage" },
 ];

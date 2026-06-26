@@ -12,6 +12,7 @@ import {
   getCallerDirectory,
   getRealDelegates,
   getRosterCounts,
+  getRosterGroups,
   rosterKey,
   type CallStat,
   type CallActivity,
@@ -355,8 +356,44 @@ export async function callers(): Promise<CallerPerf[]> {
     .sort((a, b) => b.reached - a.reached);
 }
 
+// Review queue = potential duplicate delegates within a constituency (same phone
+// number, or identical full name), surfaced from the roster for a human to fix.
+// Scoped to the viewer's area.
 export async function conflicts(): Promise<Conflict[]> {
-  return [];
+  const [groups, scope] = await Promise.all([getRosterGroups(), getViewerScope()]);
+  const allowed = new Set(
+    scopeHierarchy(REAL_HIERARCHY, scope).flatMap((r) => r.constituencies.map((c) => rosterKey(r.name, c.name))),
+  );
+  const out: Conflict[] = [];
+  for (const g of groups) {
+    if (!allowed.has(rosterKey(g.region, g.constituency))) continue;
+    const byPhone = new Map<string, typeof g.delegates>();
+    const byName = new Map<string, typeof g.delegates>();
+    for (const d of g.delegates) {
+      const phone = (d.contact ?? "").replace(/\D/g, "");
+      if (phone.length >= 9) (byPhone.get(phone) ?? byPhone.set(phone, []).get(phone)!).push(d);
+      const name = d.name.trim().toLowerCase().replace(/\s+/g, " ");
+      if (name.length >= 5) (byName.get(name) ?? byName.set(name, []).get(name)!).push(d);
+    }
+    const flagged = new Set<typeof g.delegates[number]>();
+    const emit = (members: typeof g.delegates, reason: string) => {
+      const fresh = members.filter((m) => !flagged.has(m));
+      if (members.length < 2 || fresh.length === 0) return;
+      members.forEach((m) => flagged.add(m));
+      out.push({
+        id: `${g.region}-${g.constituency}-${reason}-${members.map((m) => m.id ?? m.name).join("|")}`.slice(0, 140),
+        delegateId: members[0].id ?? "",
+        delegateName: members.map((m) => m.name).join(" / "),
+        constituency: `${g.region} · ${g.constituency}`,
+        branch: reason,
+        rawFlags: members.map((m) => `${m.name} — ${m.position}${m.contact ? ` (${m.contact})` : ""}`),
+        createdAt: "",
+      });
+    };
+    for (const [phone, dels] of byPhone) if (dels.length > 1) emit(dels, `Same phone ${phone}`);
+    for (const dels of byName.values()) if (dels.length > 1) emit(dels, "Same name");
+  }
+  return out;
 }
 
 export async function syncOverview(): Promise<SyncOverview> {

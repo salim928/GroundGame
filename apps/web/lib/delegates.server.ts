@@ -147,6 +147,11 @@ export async function getAllDelegates(): Promise<RealDelegate[]> {
   return Object.values(store).flatMap((v) => v.delegates);
 }
 
+/** Roster grouped by constituency (for duplicate detection / review). */
+export async function getRosterGroups(): Promise<Array<{ region: string; constituency: string; delegates: RealDelegate[] }>> {
+  return Object.values(await getStore());
+}
+
 export async function rosterStats(): Promise<{ constituencies: number; delegates: number }> {
   const store = await getStore();
   const vals = Object.values(store);
