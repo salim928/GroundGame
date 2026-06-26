@@ -2,7 +2,7 @@
 // requester's JWT + scope first. Super admins manage any constituency; regional
 // coordinators only their region; constituency coordinators only their own.
 import { NextResponse } from "next/server";
-import { adminConfigured, adminRest, canManageConstituency, getRequester } from "@/lib/admin.server";
+import { adminConfigured, adminRest, adminRestAll, canManageConstituency, getRequester } from "@/lib/admin.server";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export async function GET(req: Request) {
   if (!me || !MANAGER_ROLES.includes(me.role)) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
-  const rows = await adminRest<any[]>(
+  const rows = await adminRestAll<any>(
     "/rest/v1/profiles?role=eq.caller&select=user_id,full_name,is_active,constituency_id," +
       "constituencies(name,code,region_id,regions(name,code))&order=full_name",
   );

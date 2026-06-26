@@ -264,7 +264,6 @@ export async function conflicts(): Promise<Conflict[]> {
 }
 
 export async function syncOverview(): Promise<SyncOverview> {
-  const counts = await getRosterCounts();
   const total = REAL_HIERARCHY.reduce((s, r) => s + r.constituencies.length, 0);
   return {
     lastSyncMins: -1,

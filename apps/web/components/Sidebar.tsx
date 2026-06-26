@@ -14,6 +14,7 @@ import {
   Menu,
   LogOut,
   FolderTree,
+  KeyRound,
 } from "lucide-react";
 import { clearSession, getSession, type DemoPersona } from "@/lib/session";
 import { canAccess } from "@/lib/access";
@@ -27,6 +28,7 @@ const NAV = [
   { href: "/directory", label: "Directory", icon: FolderTree, section: "Data" },
   { href: "/callers", label: "Callers", icon: PhoneCall, section: "Data" },
   { href: "/settings/team", label: "Team & roles", icon: Users, section: "Manage" },
+  { href: "/settings/account", label: "Account", icon: KeyRound, section: "Manage" },
 ];
 
 export function Sidebar() {

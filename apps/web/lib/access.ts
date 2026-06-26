@@ -41,6 +41,7 @@ const STAFF_VIEW = [
   "/directory",
   "/callers",
   "/constituencies",
+  "/settings/account",
 ];
 
 const ALLOWED: Record<Role, string[]> = {

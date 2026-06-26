@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
+  KeyRound,
   Loader2,
   LogOut,
   Phone,
@@ -15,6 +16,8 @@ import { getSupabase } from "@/lib/supabase";
 import { clearSession, getSession } from "@/lib/session";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/primitives";
+import { ChangePassword } from "@/components/ChangePassword";
 import { cn } from "@/lib/utils";
 
 type Outcome = "supportive" | "undecided" | "hostile" | "wrong_number";
@@ -46,6 +49,7 @@ export default function CallerConsolePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showPw, setShowPw] = useState(false);
   const [name, setName] = useState("");
   const [scope, setScope] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
@@ -170,13 +174,25 @@ export default function CallerConsolePage() {
               <div className="text-xs text-slate-400">{scope}</div>
             </div>
           </div>
-          <button onClick={signOut} className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
-            <LogOut size={14} /> Sign out
-          </button>
+          <div className="flex items-center gap-4">
+            <button onClick={() => setShowPw((v) => !v)} className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
+              <KeyRound size={14} /> Password
+            </button>
+            <button onClick={signOut} className="flex items-center gap-1.5 text-xs text-slate-300 hover:text-white">
+              <LogOut size={14} /> Sign out
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl px-4 py-5">
+        {showPw && (
+          <Card className="mb-5 max-w-md">
+            <h2 className="mb-3 font-semibold text-foreground">Change password</h2>
+            <ChangePassword />
+          </Card>
+        )}
+
         <div className="mb-4">
           <h1 className="text-xl font-semibold text-foreground">Hi {name.split(" ")[0] || "there"} 👋</h1>
           <p className="text-sm text-muted-foreground">

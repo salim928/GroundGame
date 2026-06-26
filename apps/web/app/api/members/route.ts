@@ -1,7 +1,7 @@
 // Staff member management API (privileged, service-role). Super-admin only.
 // Lists / creates / deactivates dashboard members (everyone except field callers).
 import { NextResponse } from "next/server";
-import { adminConfigured, adminRest, getRequester } from "@/lib/admin.server";
+import { adminConfigured, adminRest, adminRestAll, getRequester } from "@/lib/admin.server";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +25,7 @@ async function requireSuper(req: Request) {
 export async function GET(req: Request) {
   const { error } = await requireSuper(req);
   if (error) return error;
-  const rows = await adminRest<any[]>(
+  const rows = await adminRestAll<any>(
     "/rest/v1/profiles?role=in.(super_admin,regional_coordinator,constituency_coordinator,analyst)" +
       "&select=user_id,full_name,role,is_active,regions(name),constituencies(name)&order=role",
   );

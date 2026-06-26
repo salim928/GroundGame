@@ -24,6 +24,21 @@ export async function adminRest<T = any>(path: string, init?: RequestInit): Prom
   return (res.status === 204 ? null : await res.json()) as T;
 }
 
+/** Paginated GET that pages past PostgREST's 1000-row cap. The path must already
+ *  include an `order=` for stable paging. */
+export async function adminRestAll<T = any>(path: string): Promise<T[]> {
+  const rows: T[] = [];
+  const PAGE = 1000;
+  const sep = path.includes("?") ? "&" : "?";
+  for (let offset = 0; ; offset += PAGE) {
+    const page = await adminRest<T[]>(`${path}${sep}limit=${PAGE}&offset=${offset}`);
+    if (!Array.isArray(page) || page.length === 0) break;
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows;
+}
+
 export interface Requester {
   userId: string;
   role: string;

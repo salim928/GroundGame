@@ -7,7 +7,6 @@
 export function BrandPanel() {
   return (
     <div className="relative hidden bg-[#0a1b3e] md:block">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/logo2.jpg"
         alt="NDC — Operations Excellence: Driven by Service. Powered by Purpose."
