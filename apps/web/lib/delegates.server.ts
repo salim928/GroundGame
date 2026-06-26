@@ -21,26 +21,57 @@ const STORE_TTL_MS = 60_000;
 
 const keyOf = (region: string, constituency: string) => `${region}::${constituency.toLowerCase()}`;
 
+// PostgREST caps each response (default 1000 rows). Page through the whole table
+// with explicit limit/offset so large datasets aren't silently truncated. The
+// base URL must already include an `order=` for stable paging.
+async function fetchAllRows<T>(base: string, headers: Record<string, string>): Promise<T[]> {
+  const rows: T[] = [];
+  const PAGE = 1000;
+  const sep = base.includes("?") ? "&" : "?";
+  for (let offset = 0; ; offset += PAGE) {
+    const res = await fetch(`${base}${sep}limit=${PAGE}&offset=${offset}`, { headers, cache: "no-store" });
+    if (!res.ok) break;
+    const page = (await res.json()) as T[];
+    if (!Array.isArray(page) || page.length === 0) break;
+    rows.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return rows;
+}
+
 // --- source 1: Supabase (preferred — available on the deployed app) -----------
+type DelegateRowSb = {
+  id: string;
+  position: string;
+  full_name: string;
+  phone: string | null;
+  constituencies: { name: string; regions: { name: string } | null } | null;
+};
+
 async function fromSupabase(): Promise<Store | null> {
   // URL falls back to the public one, so deploys only need the service-role secret.
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return null;
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  const select = "id,position,full_name,phone,constituencies(name,regions(name))";
   try {
-    const res = await fetch(
-      `${url}/rest/v1/delegates?select=id,position,full_name,phone,constituencies(name,regions(name))&is_active=eq.true&limit=20000`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" },
-    );
-    if (!res.ok) return null;
-    const rows = (await res.json()) as Array<{
-      id: string;
-      position: string;
-      full_name: string;
-      phone: string | null;
-      constituencies: { name: string; regions: { name: string } | null } | null;
-    }>;
-    if (!Array.isArray(rows) || rows.length === 0) return null;
+    // PostgREST caps each response (default 1000 rows), so page through the whole
+    // table with explicit ranges — otherwise only the first 1000 delegates load.
+    const rows: DelegateRowSb[] = [];
+    const PAGE = 1000;
+    for (let offset = 0; ; offset += PAGE) {
+      const res = await fetch(
+        `${url}/rest/v1/delegates?select=${select}&is_active=eq.true&order=id&limit=${PAGE}&offset=${offset}`,
+        { headers, cache: "no-store" },
+      );
+      if (!res.ok) break;
+      const page = (await res.json()) as DelegateRowSb[];
+      if (!Array.isArray(page) || page.length === 0) break;
+      rows.push(...page);
+      if (page.length < PAGE) break;
+    }
+    if (rows.length === 0) return null;
     const store: Store = {};
     for (const r of rows) {
       const cname = r.constituencies?.name;
@@ -140,17 +171,15 @@ export async function getCallStats(): Promise<Record<string, CallStat>> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return {};
   try {
-    const res = await fetch(
-      `${url}/rest/v1/call_records?select=called,reached,outcome,delegates(constituencies(name,regions(name)))&limit=100000`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" },
-    );
-    if (!res.ok) return {};
-    const rows = (await res.json()) as Array<{
+    const rows = await fetchAllRows<{
       called: boolean;
       reached: boolean;
       outcome: string | null;
       delegates: { constituencies: { name: string; regions: { name: string } | null } | null } | null;
-    }>;
+    }>(
+      `${url}/rest/v1/call_records?select=called,reached,outcome,delegates(constituencies(name,regions(name)))&order=id`,
+      { apikey: key, Authorization: `Bearer ${key}` },
+    );
     const out: Record<string, CallStat> = {};
     for (const r of rows) {
       const cname = r.delegates?.constituencies?.name;
@@ -186,18 +215,16 @@ export async function getCallerStats(): Promise<CallerStat[]> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return [];
   try {
-    const res = await fetch(
-      `${url}/rest/v1/call_records?select=caller_label,called,reached,outcome,delegates(constituencies(name,regions(name)))&caller_label=not.is.null&limit=100000`,
-      { headers: { apikey: key, Authorization: `Bearer ${key}` }, cache: "no-store" },
-    );
-    if (!res.ok) return [];
-    const rows = (await res.json()) as Array<{
+    const rows = await fetchAllRows<{
       caller_label: string | null;
       called: boolean;
       reached: boolean;
       outcome: string | null;
       delegates: { constituencies: { name: string; regions: { name: string } | null } | null } | null;
-    }>;
+    }>(
+      `${url}/rest/v1/call_records?select=caller_label,called,reached,outcome,delegates(constituencies(name,regions(name)))&caller_label=not.is.null&order=id`,
+      { apikey: key, Authorization: `Bearer ${key}` },
+    );
     const byLabel: Record<string, CallerStat> = {};
     for (const r of rows) {
       const label = r.caller_label?.trim();
