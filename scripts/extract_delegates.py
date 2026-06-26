@@ -181,6 +181,30 @@ def pdf_lines(path):
     except Exception:
         return [], []
 
+EMF_FONTS = {"Times New Roman", "Agency FB", "Calibri", "Arial", "Cambria Math",
+             "Symbol", "MS Gothic", "Wingdings", "Calibri Light"}
+
+def emf_lines(docx_path):
+    """Some constituencies pasted the roster as an embedded EMF image instead of
+    real text. Pull the UTF-16 text runs out of the EMF; phone numbers there lost
+    their leading zero, so restore it on 9-digit runs."""
+    try:
+        z = zipfile.ZipFile(docx_path)
+    except Exception:
+        return []
+    out = []
+    for n in z.namelist():
+        if "/media/" in n.lower() and n.lower().endswith(".emf"):
+            txt = z.read(n).decode("utf-16-le", "ignore")
+            for r in re.findall(r"[ -~]{3,}", txt):
+                r = r.strip()
+                if not r or r in EMF_FONTS:
+                    continue
+                if re.fullmatch(r"\d{9}", r):  # phone with the leading 0 dropped
+                    r = "0" + r
+                out.append(r)
+    return out
+
 # ---- delegate parsing --------------------------------------------------------
 # Lines that end on a wrapped position fragment (e.g. "Communication" / "Officer").
 FRAG_RE = re.compile(r"(communication|deputy|women|youth|nasara|council of|dep\.?|vice|other)\s*$", re.I)
@@ -370,7 +394,8 @@ def main():
                 tables, lines = [], []
             dels_t = from_units(units_from_tables(tables), require_phone=False)
             dels_x = from_units(merge_fragments(lines), require_phone=True)
-            dels = dels_t if len(dels_t) >= len(dels_x) else dels_x
+            dels_e = from_units(emf_lines(path), require_phone=True) if ext == "docx" else []
+            dels = max((dels_t, dels_x, dels_e), key=len)  # richest source wins
             dels = dedupe(dels)
             key = f"{region}::{con.lower()}"
             if dels:
@@ -379,6 +404,17 @@ def main():
                 result[key] = {"region": region, "constituency": con, "delegates": dels}
             else:
                 stats["empty"].append(f"{region}/{con} ({ext})")
+
+    # Merge manual rosters for sources that can't be auto-parsed (e.g. image-only
+    # scans transcribed by hand). Gitignored — contains PII.
+    manual_path = "scripts/manual_rosters.local.json"
+    if os.path.exists(manual_path):
+        manual = json.load(open(manual_path, encoding="utf-8"))
+        for key, val in manual.items():
+            if val.get("delegates"):
+                result[key] = val
+                stats["delegates"] += len(val["delegates"])
+        print(f"Merged {len(manual)} manual roster(s) from {manual_path}")
 
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:

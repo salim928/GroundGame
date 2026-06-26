@@ -27,3 +27,4 @@ supabase/*.local.sql
 scripts/accounts.local.json
 *.local.pdf
 GroundGame_Logins*.pdf
+scripts/*.local.json
