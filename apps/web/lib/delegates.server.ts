@@ -206,6 +206,7 @@ export interface CallerStat {
   attempts: number;
   reached: number;
   supportive: number;
+  lastAt: string | null;
 }
 
 /** Per-caller activity aggregated from call_records.caller_label (what the caller
@@ -220,9 +221,10 @@ export async function getCallerStats(): Promise<CallerStat[]> {
       called: boolean;
       reached: boolean;
       outcome: string | null;
+      updated_at: string | null;
       delegates: { constituencies: { name: string; regions: { name: string } | null } | null } | null;
     }>(
-      `${url}/rest/v1/call_records?select=caller_label,called,reached,outcome,delegates(constituencies(name,regions(name)))&caller_label=not.is.null&order=id`,
+      `${url}/rest/v1/call_records?select=caller_label,called,reached,outcome,updated_at,delegates(constituencies(name,regions(name)))&caller_label=not.is.null&order=id`,
       { apikey: key, Authorization: `Bearer ${key}` },
     );
     const byLabel: Record<string, CallerStat> = {};
@@ -231,12 +233,13 @@ export async function getCallerStats(): Promise<CallerStat[]> {
       if (!label) continue;
       const cname = r.delegates?.constituencies?.name ?? "";
       const region = r.delegates?.constituencies?.regions?.name ?? "";
-      const s = (byLabel[label] ??= { label, region, constituency: cname, attempts: 0, reached: 0, supportive: 0 });
+      const s = (byLabel[label] ??= { label, region, constituency: cname, attempts: 0, reached: 0, supportive: 0, lastAt: null });
       if (!s.constituency && cname) s.constituency = cname;
       if (!s.region && region) s.region = region;
       if (r.called) s.attempts += 1;
       if (r.reached) s.reached += 1;
       if (r.outcome === "supportive") s.supportive += 1;
+      if (r.updated_at && (!s.lastAt || r.updated_at > s.lastAt)) s.lastAt = r.updated_at;
     }
     return Object.values(byLabel);
   } catch {
@@ -273,6 +276,7 @@ export async function getDelegateCalls(ids: string[]): Promise<Record<string, De
 }
 
 export interface CallActivity {
+  called: boolean;
   reached: boolean;
   outcome: string | null;
   updatedAt: string | null;
@@ -281,23 +285,25 @@ export interface CallActivity {
   constituency: string;
 }
 
-/** Raw reached/outcome call records with their date + delegate position, for the
- *  time-series (reached-per-day) and segment (executive engagement) views. */
+/** Raw call records with state + date + delegate position, for the time-series
+ *  (reached-per-day), trend (week-over-week) and segment views. */
 export async function getCallActivity(): Promise<CallActivity[]> {
   const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) return [];
   try {
     const rows = await fetchAllRows<{
+      called: boolean;
       reached: boolean;
       outcome: string | null;
       updated_at: string | null;
       delegates: { position: string | null; constituencies: { name: string; regions: { name: string } | null } | null } | null;
     }>(
-      `${url}/rest/v1/call_records?select=reached,outcome,updated_at,delegates(position,constituencies(name,regions(name)))&order=id`,
+      `${url}/rest/v1/call_records?select=called,reached,outcome,updated_at,delegates(position,constituencies(name,regions(name)))&order=id`,
       { apikey: key, Authorization: `Bearer ${key}` },
     );
     return rows.map((r) => ({
+      called: r.called,
       reached: r.reached,
       outcome: r.outcome,
       updatedAt: r.updated_at,
@@ -305,6 +311,42 @@ export async function getCallActivity(): Promise<CallActivity[]> {
       region: r.delegates?.constituencies?.regions?.name ?? "",
       constituency: r.delegates?.constituencies?.name ?? "",
     }));
+  } catch {
+    return [];
+  }
+}
+
+export interface Callback {
+  name: string;
+  region: string;
+  constituency: string;
+  callbackAt: string;
+  caller: string | null;
+}
+
+/** Scheduled callbacks (call_records.callback_at set), with delegate + location. */
+export async function getCallbacks(): Promise<Callback[]> {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return [];
+  try {
+    const rows = await fetchAllRows<{
+      callback_at: string | null;
+      caller_label: string | null;
+      delegates: { full_name: string | null; constituencies: { name: string; regions: { name: string } | null } | null } | null;
+    }>(
+      `${url}/rest/v1/call_records?callback_at=not.is.null&select=callback_at,caller_label,delegates(full_name,constituencies(name,regions(name)))&order=callback_at`,
+      { apikey: key, Authorization: `Bearer ${key}` },
+    );
+    return rows
+      .filter((r) => r.callback_at && r.delegates?.constituencies)
+      .map((r) => ({
+        name: r.delegates?.full_name ?? "Delegate",
+        region: r.delegates?.constituencies?.regions?.name ?? "",
+        constituency: r.delegates?.constituencies?.name ?? "",
+        callbackAt: r.callback_at as string,
+        caller: r.caller_label,
+      }));
   } catch {
     return [];
   }

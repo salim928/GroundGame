@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CalendarClock,
   CheckCircle2,
   KeyRound,
   Loader2,
@@ -26,6 +27,7 @@ interface CallState {
   called: boolean;
   reached: boolean;
   outcome: Outcome | null;
+  callbackAt: string | null;
 }
 
 interface Row extends CallState {
@@ -90,7 +92,7 @@ export default function CallerConsolePage() {
     // Your delegates only — RLS limits this to your assigned constituency.
     const { data: dels, error: delErr } = await supa
       .from("delegates")
-      .select("id, full_name, phone, position, call_records(called, reached, outcome)")
+      .select("id, full_name, phone, position, call_records(called, reached, outcome, callback_at)")
       .eq("is_active", true)
       .order("position");
     if (delErr) {
@@ -109,6 +111,7 @@ export default function CallerConsolePage() {
           called: cr?.called ?? false,
           reached: cr?.reached ?? false,
           outcome: (cr?.outcome as Outcome) ?? null,
+          callbackAt: cr?.callback_at ? String(cr.callback_at).slice(0, 16) : null,
         };
       }),
     );
@@ -141,6 +144,7 @@ export default function CallerConsolePage() {
         called: row.called,
         reached: row.reached,
         outcome: row.reached ? row.outcome : null,
+        callback_at: row.callbackAt ? new Date(row.callbackAt).toISOString() : null,
         source: "app",
         updated_at: new Date().toISOString(),
       },
@@ -297,6 +301,18 @@ export default function CallerConsolePage() {
                       </option>
                     ))}
                   </select>
+                )}
+
+                {r.called && (
+                  <label className="flex items-center gap-1 text-xs text-muted-foreground" title="Schedule a callback">
+                    <CalendarClock size={13} />
+                    <input
+                      type="datetime-local"
+                      value={r.callbackAt ?? ""}
+                      onChange={(e) => patch(r.id, { callbackAt: e.target.value || null })}
+                      className="h-8 rounded-md border border-input bg-card px-2 text-xs"
+                    />
+                  </label>
                 )}
 
                 <div className="ml-auto">

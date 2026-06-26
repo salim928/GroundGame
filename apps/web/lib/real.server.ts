@@ -7,6 +7,7 @@ import {
   getAllDelegates,
   getCallStats,
   getCallActivity,
+  getCallbacks,
   getCallerStats,
   getCallerDirectory,
   getRealDelegates,
@@ -121,6 +122,36 @@ function dailyReachedFrom(activity: CallActivity[]): DailyReached[] {
   return out;
 }
 
+// Week-over-week movement (percentage points) from the recent call activity.
+function trendsFrom(activity: CallActivity[], delegates: number, reached: number) {
+  const now = Date.now();
+  const WEEK = 7 * 24 * 3600 * 1000;
+  const last7 = (a: CallActivity) => a.updatedAt && now - Date.parse(a.updatedAt) <= WEEK;
+  const calledLast7 = activity.filter((a) => a.called && last7(a)).length;
+  const reachedLast7 = activity.filter((a) => a.reached && last7(a)).length;
+  const supportiveLast7 = activity.filter((a) => a.outcome === "supportive" && last7(a)).length;
+  const pp = (n: number, d: number) => (d ? Math.round((n / d) * 1000) / 10 : 0);
+  return {
+    coverage: pp(calledLast7, delegates),
+    reached: pp(reachedLast7, delegates),
+    support: pp(supportiveLast7, reached),
+    delegates: 0,
+  };
+}
+
+// "just now" / "5m ago" / "3h ago" / "2d ago" from an ISO timestamp.
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const diff = Date.now() - Date.parse(iso);
+  if (!Number.isFinite(diff) || diff < 0) return "just now";
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
 async function segments(activity?: CallActivity[]): Promise<SegmentEngagement[]> {
   const [all, act] = await Promise.all([getAllDelegates(), activity ? Promise.resolve(activity) : getCallActivity()]);
   const total = (re: RegExp) => all.filter((d) => re.test(d.position)).length;
@@ -171,7 +202,7 @@ export async function overview(): Promise<OverviewPayload> {
       requiredPerDay,
       onPace: reachedPerDay >= requiredPerDay && reached > 0,
     },
-    trends: { coverage: 0, reached: 0, support: 0, delegates: 0 },
+    trends: trendsFrom(activity, delegates, reached),
   };
 }
 
@@ -217,7 +248,11 @@ export async function constituency(id: string): Promise<ConstituencyPayload | nu
   }));
 
   // Caller board: who is assigned to this constituency + their logged activity.
-  const [dir, callerStats] = await Promise.all([getCallerDirectory(), getCallerStats()]);
+  const [dir, callerStats, allCallbacks] = await Promise.all([
+    getCallerDirectory(),
+    getCallerStats(),
+    getCallbacks(),
+  ]);
   const statByName = new Map(
     callerStats.filter((s) => s.constituency === rollup!.name).map((s) => [s.label, s]),
   );
@@ -228,11 +263,22 @@ export async function constituency(id: string): Promise<ConstituencyPayload | nu
       attempts: st?.attempts ?? 0,
       reached: st?.reached ?? 0,
       assigned: roster.length,
-      lastActive: (st?.attempts ?? 0) > 0 ? "active" : "not started",
+      lastActive: st?.lastAt ? relativeTime(st.lastAt) : "not started",
     };
   });
 
-  return { constituency: rollup, spine: rollup.spine, branches: [], callbacks: [], callers, delegates };
+  // Callbacks scheduled for this constituency.
+  const callbacks = allCallbacks
+    .filter((c) => c.constituency === rollup!.name)
+    .map((c, i) => ({
+      delegateId: `${id}-cb${i}`,
+      name: c.name,
+      branch: "—",
+      callbackAt: new Date(c.callbackAt).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }),
+      caller: c.caller ?? "—",
+    }));
+
+  return { constituency: rollup, spine: rollup.spine, branches: [], callbacks, callers, delegates };
 }
 
 export async function analytics(): Promise<AnalyticsPayload> {
