@@ -272,4 +272,31 @@ export async function getDelegateCalls(ids: string[]): Promise<Record<string, De
   }
 }
 
+/** Active caller full-names per constituency (region::constituency -> names),
+ *  read from profiles. Lets the dashboard show who's assigned where. */
+export async function getCallerDirectory(): Promise<Record<string, string[]>> {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return {};
+  try {
+    const rows = await fetchAllRows<{
+      full_name: string | null;
+      constituencies: { name: string; regions: { name: string } | null } | null;
+    }>(
+      `${url}/rest/v1/profiles?role=eq.caller&is_active=eq.true&select=full_name,constituencies(name,regions(name))&order=full_name`,
+      { apikey: key, Authorization: `Bearer ${key}` },
+    );
+    const out: Record<string, string[]> = {};
+    for (const r of rows) {
+      const cname = r.constituencies?.name;
+      const region = r.constituencies?.regions?.name;
+      if (!cname || !region) continue;
+      (out[keyOf(region, cname)] ??= []).push(r.full_name ?? "Caller");
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 export const rosterKey = keyOf;

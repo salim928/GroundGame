@@ -7,6 +7,7 @@ import {
   getAllDelegates,
   getCallStats,
   getCallerStats,
+  getCallerDirectory,
   getRealDelegates,
   getRosterCounts,
   rosterKey,
@@ -57,7 +58,12 @@ function aggregate(items: { kpis: Kpis; spine: Spine }[]): { kpis: Kpis; spine: 
 }
 
 async function build() {
-  const [counts, stats, scope] = await Promise.all([getRosterCounts(), getCallStats(), getViewerScope()]);
+  const [counts, stats, scope, callerDir] = await Promise.all([
+    getRosterCounts(),
+    getCallStats(),
+    getViewerScope(),
+    getCallerDirectory(),
+  ]);
   const regions = scopeHierarchy(REAL_HIERARCHY, scope).map((r) => {
     const constituencies: ConstituencyRollup[] = r.constituencies.map((c) => {
       const key = rosterKey(r.name, c.name);
@@ -72,7 +78,7 @@ async function build() {
         code: c.code,
         kpis,
         spine,
-        callersAssigned: 0,
+        callersAssigned: (callerDir[key] ?? []).length,
         targetContacts: TARGET,
         classification: classFrom(spine, kpis.reached),
         status: delegates === 0 ? ("no_callers" as const) : ("ok" as const),
@@ -182,7 +188,24 @@ export async function constituency(id: string): Promise<ConstituencyPayload | nu
     isInfluencer: /chair|secretary/i.test(d.position),
     hasConflict: false,
   }));
-  return { constituency: rollup, spine: rollup.spine, branches: [], callbacks: [], callers: [], delegates };
+
+  // Caller board: who is assigned to this constituency + their logged activity.
+  const [dir, callerStats] = await Promise.all([getCallerDirectory(), getCallerStats()]);
+  const statByName = new Map(
+    callerStats.filter((s) => s.constituency === rollup!.name).map((s) => [s.label, s]),
+  );
+  const callers = (dir[rosterKey(regionName, rollup.name)] ?? []).map((name) => {
+    const st = statByName.get(name);
+    return {
+      label: name,
+      attempts: st?.attempts ?? 0,
+      reached: st?.reached ?? 0,
+      assigned: roster.length,
+      lastActive: (st?.attempts ?? 0) > 0 ? "active" : "not started",
+    };
+  });
+
+  return { constituency: rollup, spine: rollup.spine, branches: [], callbacks: [], callers, delegates };
 }
 
 export async function analytics(): Promise<AnalyticsPayload> {
