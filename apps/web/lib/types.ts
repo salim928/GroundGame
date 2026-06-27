@@ -170,6 +170,14 @@ export interface ProjectionWeights {
   opposed: number;
 }
 
+// Projection-share cutoffs that map a constituency to a classification band.
+export interface ClassThresholds {
+  stronghold: number;
+  lean: number;
+  tossup: number;
+  weak: number;
+}
+
 export interface CallerPerf {
   label: string;
   region: string;

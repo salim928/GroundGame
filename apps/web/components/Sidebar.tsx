@@ -16,6 +16,7 @@ import {
   FolderTree,
   KeyRound,
   AlertTriangle,
+  SlidersHorizontal,
 } from "lucide-react";
 import { clearSession, getSession, type DemoPersona } from "@/lib/session";
 import { canAccess } from "@/lib/access";
@@ -30,6 +31,7 @@ const NAV = [
   { href: "/callers", label: "Callers", icon: PhoneCall, section: "Data" },
   { href: "/conflicts", label: "Review queue", icon: AlertTriangle, section: "Data" },
   { href: "/settings/team", label: "Team & roles", icon: Users, section: "Manage" },
+  { href: "/settings/config", label: "Campaign settings", icon: SlidersHorizontal, section: "Manage" },
   { href: "/settings/account", label: "Account", icon: KeyRound, section: "Manage" },
 ];
 

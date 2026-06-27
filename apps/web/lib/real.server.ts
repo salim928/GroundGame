@@ -18,6 +18,7 @@ import {
   type CallActivity,
 } from "./delegates.server";
 import { addSpines, classify, projectShare } from "./analytics";
+import { getConfig, type CampaignConfig } from "./config.server";
 import { getViewerScope, scopeHierarchy } from "./scope.server";
 import type {
   Classification,
@@ -36,7 +37,6 @@ import type {
   SyncOverview,
 } from "./types";
 
-const TARGET = 10;
 const EMPTY_SPINE: Spine = { supportive: 0, undecided: 0, opposed: 0, notReached: 0 };
 
 // Derive a support spine from logged calls; unreached delegates fill notReached.
@@ -51,8 +51,8 @@ function kpisFrom(delegates: number, st: CallStat | undefined): Kpis {
   const reached = st?.reached ?? 0;
   return { delegates, called, reached, coverage: delegates ? called / delegates : 0 };
 }
-function classFrom(spine: Spine, reached: number): Classification {
-  return reached === 0 ? "unrated" : classify(projectShare(spine));
+function classFrom(spine: Spine, reached: number, cfg: CampaignConfig): Classification {
+  return reached === 0 ? "unrated" : classify(projectShare(spine, cfg.weights), cfg.thresholds);
 }
 function aggregate(items: { kpis: Kpis; spine: Spine }[]): { kpis: Kpis; spine: Spine } {
   const spine = items.reduce((acc, i) => addSpines(acc, i.spine), EMPTY_SPINE);
@@ -63,11 +63,12 @@ function aggregate(items: { kpis: Kpis; spine: Spine }[]): { kpis: Kpis; spine: 
 }
 
 async function build() {
-  const [counts, stats, scope, callerDir] = await Promise.all([
+  const [counts, stats, scope, callerDir, cfg] = await Promise.all([
     getRosterCounts(),
     getCallStats(),
     getViewerScope(),
     getCallerDirectory(),
+    getConfig(),
   ]);
   const regions = scopeHierarchy(REAL_HIERARCHY, scope).map((r) => {
     const constituencies: ConstituencyRollup[] = r.constituencies.map((c) => {
@@ -84,8 +85,8 @@ async function build() {
         kpis,
         spine,
         callersAssigned: (callerDir[key] ?? []).length,
-        targetContacts: TARGET,
-        classification: classFrom(spine, kpis.reached),
+        targetContacts: cfg.targetContacts,
+        classification: classFrom(spine, kpis.reached, cfg),
         status: delegates === 0 ? ("no_callers" as const) : ("ok" as const),
       };
     });
@@ -97,7 +98,7 @@ async function build() {
       kpis: agg.kpis,
       spine: agg.spine,
       constituencies: r.constituencies.length,
-      classification: classFrom(agg.spine, agg.kpis.reached),
+      classification: classFrom(agg.spine, agg.kpis.reached, cfg),
     };
     return { rollup, constituencies };
   });
@@ -167,7 +168,7 @@ async function segments(activity?: CallActivity[]): Promise<SegmentEngagement[]>
 }
 
 export async function overview(): Promise<OverviewPayload> {
-  const [regions, activity] = await Promise.all([build(), getCallActivity()]);
+  const [regions, activity, cfg] = await Promise.all([build(), getCallActivity(), getConfig()]);
   const allCons = regions.flatMap((r) => r.constituencies);
   const national = aggregate(allCons);
   const delegates = national.kpis.delegates;
@@ -175,7 +176,7 @@ export async function overview(): Promise<OverviewPayload> {
   const withRoster = allCons.filter((c) => c.kpis.delegates > 0).length;
   const totalCons = regions.reduce((s, r) => s + r.constituencies.length, 0);
   const noRoster = totalCons - withRoster;
-  const daysLeft = 21;
+  const daysLeft = cfg.targetDays;
   const dailyReached = dailyReachedFrom(activity);
   const reachedPerDay = Math.round(dailyReached.reduce((s, d) => s + d.reached, 0) / dailyReached.length);
   const requiredPerDay = Math.ceil(Math.max(0, delegates - reached) / daysLeft);

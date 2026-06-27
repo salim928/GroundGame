@@ -1,4 +1,4 @@
-import type { Classification, ProjectionWeights, Spine } from "./types";
+import type { Classification, ClassThresholds, ProjectionWeights, Spine } from "./types";
 
 // NDC brand greens — single hex source for charts (mirrors the --brand-* CSS scale).
 export const BRAND = {
@@ -37,17 +37,17 @@ export function projectShare(s: Spine, w: ProjectionWeights = DEFAULT_WEIGHTS): 
   return weighted / total;
 }
 
-const THRESHOLDS: Record<Exclude<Classification, "unrated">, number> = {
+export const DEFAULT_THRESHOLDS: ClassThresholds = {
   stronghold: 0.65,
   lean: 0.55,
   tossup: 0.45,
   weak: 0,
 };
 
-export function classify(share: number): Classification {
-  if (share >= THRESHOLDS.stronghold) return "stronghold";
-  if (share >= THRESHOLDS.lean) return "lean";
-  if (share >= THRESHOLDS.tossup) return "tossup";
+export function classify(share: number, t: ClassThresholds = DEFAULT_THRESHOLDS): Classification {
+  if (share >= t.stronghold) return "stronghold";
+  if (share >= t.lean) return "lean";
+  if (share >= t.tossup) return "tossup";
   return "weak";
 }
 
