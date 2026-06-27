@@ -33,7 +33,7 @@ export const ROLE_HOME: Record<Role, string> = {
 };
 
 // Allowed route prefixes per role ("*" = everything). Privileged sections
-// (/upload, /settings/*) stay super-admin only; callers are locked to /caller.
+// (/settings/team, /settings/config) stay super-admin only; callers are locked to /caller.
 const STAFF_VIEW = [
   "/dashboard",
   "/regions",

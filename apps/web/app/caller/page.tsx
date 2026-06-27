@@ -38,6 +38,7 @@ interface Row extends CallState {
   saving?: boolean;
   saved?: boolean;
   dirty?: boolean;
+  saveError?: boolean;
 }
 
 const OUTCOMES: { value: Outcome; label: string }[] = [
@@ -138,13 +139,13 @@ export default function CallerConsolePage() {
   }, [rows]);
 
   function patch(id: string, next: Partial<Row>) {
-    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...next, dirty: true, saved: false } : r)));
+    setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...next, dirty: true, saved: false, saveError: false } : r)));
   }
 
   async function save(row: Row) {
     const supa = getSupabase();
     if (!supa) return;
-    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, saving: true } : r)));
+    setRows((rs) => rs.map((r) => (r.id === row.id ? { ...r, saving: true, saveError: false } : r)));
     const { error: upErr } = await supa.from("call_records").upsert(
       {
         delegate_id: row.id,
@@ -160,7 +161,9 @@ export default function CallerConsolePage() {
     );
     setRows((rs) =>
       rs.map((r) =>
-        r.id === row.id ? { ...r, saving: false, saved: !upErr, dirty: Boolean(upErr) } : r,
+        r.id === row.id
+          ? { ...r, saving: false, saved: !upErr, dirty: Boolean(upErr), saveError: Boolean(upErr) }
+          : r,
       ),
     );
   }
@@ -255,6 +258,11 @@ export default function CallerConsolePage() {
                 {r.saved && !r.dirty && (
                   <span className="flex items-center gap-1 text-xs text-emerald-600">
                     <CheckCircle2 size={14} /> Saved
+                  </span>
+                )}
+                {r.saveError && (
+                  <span className="flex items-center gap-1 text-xs text-rose-600">
+                    <TriangleAlert size={14} /> Not saved — tap Save again
                   </span>
                 )}
               </div>

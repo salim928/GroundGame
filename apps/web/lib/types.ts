@@ -250,27 +250,6 @@ export interface AnalyticsPayload {
   reachRate: number; // reached / called
 }
 
-export interface SyncRun {
-  id: string;
-  constituency: string;
-  region: string;
-  status: "success" | "partial" | "failed" | "running";
-  rowsPulled: number;
-  rowsWritten: number;
-  conflicts: number;
-  finishedAt: string; // relative label
-  durationSec: number;
-}
-
-export interface SyncOverview {
-  lastSyncMins: number;
-  sheetsTotal: number;
-  sheetsSynced: number;
-  staleSheets: number;
-  conflictsOpen: number;
-  nextSyncMins: number;
-  runs: SyncRun[];
-}
 
 export interface UploadPreview {
   regions: number;

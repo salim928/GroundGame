@@ -34,7 +34,6 @@ import type {
   RegionRollup,
   SegmentEngagement,
   Spine,
-  SyncOverview,
 } from "./types";
 
 const EMPTY_SPINE: Spine = { supportive: 0, undecided: 0, opposed: 0, notReached: 0 };
@@ -397,16 +396,4 @@ export async function conflicts(): Promise<Conflict[]> {
   return out;
 }
 
-export async function syncOverview(): Promise<SyncOverview> {
-  const total = REAL_HIERARCHY.reduce((s, r) => s + r.constituencies.length, 0);
-  return {
-    lastSyncMins: -1,
-    sheetsTotal: total,
-    sheetsSynced: 0,
-    staleSheets: 0,
-    conflictsOpen: 0,
-    nextSyncMins: 15,
-    runs: [],
-  };
-}
 

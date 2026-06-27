@@ -152,12 +152,6 @@ export async function getRosterGroups(): Promise<Array<{ region: string; constit
   return Object.values(await getStore());
 }
 
-export async function rosterStats(): Promise<{ constituencies: number; delegates: number }> {
-  const store = await getStore();
-  const vals = Object.values(store);
-  return { constituencies: vals.length, delegates: vals.reduce((s, v) => s + v.delegates.length, 0) };
-}
-
 export interface CallStat {
   called: number;
   reached: number;

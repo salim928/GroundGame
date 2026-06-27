@@ -127,8 +127,8 @@ export function Sidebar() {
         {!collapsed && (
           <div className="border-t border-white/10 px-4 py-3">
             <div className="text-xs text-slate-500">
-              <div className="font-medium text-slate-300">{persona?.name ?? "Demo User"}</div>
-              {persona ? `${persona.roleLabel} · ${persona.scope}` : "Super Admin · National"}
+              <div className="font-medium text-slate-300">{persona?.name ?? "Signed in"}</div>
+              {persona ? `${persona.roleLabel} · ${persona.scope}` : ""}
             </div>
             <button
               onClick={signOut}
