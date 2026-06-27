@@ -1,7 +1,7 @@
 // Staff member management API (privileged, service-role). Super-admin only.
 // Lists / creates / deactivates dashboard members (everyone except field callers).
 import { NextResponse } from "next/server";
-import { adminConfigured, adminRest, adminRestAll, getRequester } from "@/lib/admin.server";
+import { adminConfigured, adminRest, adminRestAll, getRequester, serverError } from "@/lib/admin.server";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +21,11 @@ async function requireSuper(req: Request) {
   return { me };
 }
 
-function serverError(e: unknown) {
-  return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
+// True when this is the only active super admin (guards against lockout).
+async function isLastActiveSuperAdmin(userId: string): Promise<boolean> {
+  const supers = await adminRest<any[]>("/rest/v1/profiles?role=eq.super_admin&is_active=eq.true&select=user_id");
+  const ids = (supers ?? []).map((s) => s.user_id);
+  return ids.length <= 1 && ids.includes(userId);
 }
 
 // Map a role + provided codes to region_id / constituency_id (resolving the ids).
@@ -45,39 +48,61 @@ async function resolveScope(role: string, regionCode?: string, constituencyCode?
 export async function GET(req: Request) {
   const { error } = await requireSuper(req);
   if (error) return error;
-  const rows = await adminRestAll<any>(
-    "/rest/v1/profiles?role=in.(super_admin,regional_coordinator,constituency_coordinator,analyst)" +
-      "&select=user_id,full_name,role,is_active,regions(name,code),constituencies(name,code)&order=role",
-  );
-  const members = (rows ?? []).map((r) => ({
-    userId: r.user_id,
-    fullName: r.full_name ?? "—",
-    role: r.role,
-    email: "",
-    scope: scopeLabel(r.role, r.regions?.name, r.constituencies?.name),
-    regionCode: r.regions?.code ?? null,
-    conCode: r.constituencies?.code ?? null,
-    isActive: r.is_active,
-  }));
-  return NextResponse.json({ members });
+  try {
+    const rows = await adminRestAll<any>(
+      "/rest/v1/profiles?role=in.(super_admin,regional_coordinator,constituency_coordinator,analyst)" +
+        "&select=user_id,full_name,role,is_active,regions(name,code),constituencies(name,code)&order=role",
+    );
+    const members = (rows ?? []).map((r) => ({
+      userId: r.user_id,
+      fullName: r.full_name ?? "—",
+      role: r.role,
+      email: "",
+      scope: scopeLabel(r.role, r.regions?.name, r.constituencies?.name),
+      regionCode: r.regions?.code ?? null,
+      conCode: r.constituencies?.code ?? null,
+      isActive: r.is_active,
+    }));
+    return NextResponse.json({ members });
+  } catch (e) {
+    return serverError(e);
+  }
 }
 
-// PATCH — update a member's name, role and scope.
+// PATCH — update a member's name, role, scope, or active state.
 export async function PATCH(req: Request) {
   const { error } = await requireSuper(req);
   if (error) return error;
   try {
     const body = (await req.json().catch(() => null)) as
-      | { userId?: string; fullName?: string; role?: string; regionCode?: string; constituencyCode?: string }
+      | { userId?: string; fullName?: string; role?: string; regionCode?: string; constituencyCode?: string; isActive?: boolean }
       | null;
     if (!body?.userId) return NextResponse.json({ error: "userId is required." }, { status: 400 });
     if (body.role && !STAFF_ROLES.includes(body.role)) {
       return NextResponse.json({ error: "Invalid staff role." }, { status: 400 });
     }
-    const scope = await resolveScope(body.role ?? "", body.regionCode, body.constituencyCode);
-    const patch: Record<string, unknown> = { region_id: scope.regionId, constituency_id: scope.constituencyId };
+    const curRows = await adminRest<any[]>(`/rest/v1/profiles?user_id=eq.${body.userId}&select=role,is_active`);
+    const current = curRows?.[0];
+    if (!current) return NextResponse.json({ error: "Member not found." }, { status: 404 });
+
+    // Don't let the last active super admin be demoted or deactivated.
+    const demoting = current.role === "super_admin" && body.role && body.role !== "super_admin";
+    const deactivating = current.role === "super_admin" && body.isActive === false;
+    if ((demoting || deactivating) && (await isLastActiveSuperAdmin(body.userId))) {
+      return NextResponse.json({ error: "You can't demote or deactivate the last active super admin." }, { status: 400 });
+    }
+
+    const patch: Record<string, unknown> = {};
     if (body.fullName) patch.full_name = body.fullName.trim();
-    if (body.role) patch.role = body.role;
+    if (body.isActive !== undefined) patch.is_active = body.isActive;
+    // Only touch role + scope on a full edit (role supplied), so a reactivate
+    // toggle doesn't wipe the member's region/constituency.
+    if (body.role) {
+      const scope = await resolveScope(body.role, body.regionCode, body.constituencyCode);
+      patch.role = body.role;
+      patch.region_id = scope.regionId;
+      patch.constituency_id = scope.constituencyId;
+    }
     await adminRest(`/rest/v1/profiles?user_id=eq.${body.userId}`, {
       method: "PATCH",
       headers: { Prefer: "return=minimal" },
@@ -156,12 +181,20 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const { error } = await requireSuper(req);
   if (error) return error;
-  const id = new URL(req.url).searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
-  await adminRest(`/rest/v1/profiles?user_id=eq.${id}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ is_active: false }),
-  });
-  return NextResponse.json({ ok: true });
+  try {
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
+    const curRows = await adminRest<any[]>(`/rest/v1/profiles?user_id=eq.${id}&select=role`);
+    if (curRows?.[0]?.role === "super_admin" && (await isLastActiveSuperAdmin(id))) {
+      return NextResponse.json({ error: "You can't deactivate the last active super admin." }, { status: 400 });
+    }
+    await adminRest(`/rest/v1/profiles?user_id=eq.${id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ is_active: false }),
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return serverError(e);
+  }
 }

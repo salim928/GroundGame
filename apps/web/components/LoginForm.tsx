@@ -54,7 +54,7 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
     // Resolve the user's real role + scope from their profile.
     const { data: profile, error: profileErr } = await supa
       .from("profiles")
-      .select("role, full_name, regions(name,code), constituencies(name,code)")
+      .select("role, full_name, is_active, regions(name,code), constituencies(name,code)")
       .eq("user_id", data.user.id)
       .maybeSingle();
 
@@ -62,6 +62,14 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
     if (profileErr || !profile?.role) {
       await supa.auth.signOut();
       setError("No access profile is set up for this account yet. Ask an administrator to assign your role.");
+      setLoading(false);
+      return;
+    }
+
+    // Deactivated accounts can't sign in.
+    if (profile.is_active === false) {
+      await supa.auth.signOut();
+      setError("This account has been deactivated. Contact an administrator.");
       setLoading(false);
       return;
     }

@@ -164,6 +164,16 @@ export function CallerManager() {
     refresh();
   }
 
+  async function reactivate(userId: string) {
+    const token = await getAccessToken();
+    await fetch("/api/callers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+      body: JSON.stringify({ userId, isActive: true }),
+    });
+    refresh();
+  }
+
   if (!canManage) return null;
 
   return (
@@ -292,9 +302,13 @@ export function CallerManager() {
                     <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
                       Reassign
                     </Button>
-                    {c.isActive && (
+                    {c.isActive ? (
                       <Button variant="ghost" size="sm" onClick={() => deactivate(c.userId)}>
                         Deactivate
+                      </Button>
+                    ) : (
+                      <Button variant="ghost" size="sm" onClick={() => reactivate(c.userId)}>
+                        Reactivate
                       </Button>
                     )}
                   </div>

@@ -1,6 +1,8 @@
 // Server-only privileged helpers (service-role). NEVER import from a client
 // component. Used by route handlers to verify the requester's identity/scope and
 // to perform admin writes (create caller logins) that bypass RLS by design.
+import { NextResponse } from "next/server";
+
 const URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -64,6 +66,11 @@ export async function getRequester(req: Request): Promise<Requester | null> {
   const p = rows?.[0];
   if (!p) return null;
   return { userId: user.id, role: p.role, regionId: p.region_id, constituencyId: p.constituency_id };
+}
+
+/** Surface the underlying Supabase/GoTrue error (this is an internal admin tool). */
+export function serverError(e: unknown) {
+  return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
 }
 
 /** Can this requester manage callers for the given constituency (by region/constituency id)? */

@@ -83,9 +83,17 @@ export default function CallerConsolePage() {
     // Your constituency (RLS lets you read your own profile + its constituency).
     const { data: profile } = await supa
       .from("profiles")
-      .select("full_name, constituencies(name, code, regions(name))")
+      .select("full_name, is_active, constituencies(name, code, regions(name))")
       .eq("user_id", auth.user.id)
       .single();
+
+    // Deactivated caller — sign out.
+    if (profile && (profile as any).is_active === false) {
+      clearSession();
+      await supa.auth.signOut();
+      router.replace("/login");
+      return;
+    }
     const con = (profile as any)?.constituencies;
     setScope(con ? `${con?.regions?.name ?? ""} · ${con?.name ?? ""}` : "No constituency assigned");
 

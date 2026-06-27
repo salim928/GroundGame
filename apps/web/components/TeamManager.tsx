@@ -160,6 +160,16 @@ export function TeamManager() {
     refresh();
   }
 
+  async function reactivate(userId: string) {
+    const token = await getAccessToken();
+    await fetch("/api/members", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+      body: JSON.stringify({ userId, isActive: true }),
+    });
+    refresh();
+  }
+
   return (
     <>
       <div className="mb-4 flex justify-end">
@@ -300,9 +310,15 @@ export function TeamManager() {
                       <Button variant="ghost" size="sm" onClick={() => startEdit(m)}>
                         Edit
                       </Button>
-                      {m.isActive && m.role !== "super_admin" && (
-                        <Button variant="ghost" size="sm" onClick={() => deactivate(m.userId)}>
-                          Deactivate
+                      {m.isActive ? (
+                        m.role !== "super_admin" && (
+                          <Button variant="ghost" size="sm" onClick={() => deactivate(m.userId)}>
+                            Deactivate
+                          </Button>
+                        )
+                      ) : (
+                        <Button variant="ghost" size="sm" onClick={() => reactivate(m.userId)}>
+                          Reactivate
                         </Button>
                       )}
                     </div>

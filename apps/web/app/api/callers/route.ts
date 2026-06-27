@@ -2,7 +2,7 @@
 // requester's JWT + scope first. Super admins manage any constituency; regional
 // coordinators only their region; constituency coordinators only their own.
 import { NextResponse } from "next/server";
-import { adminConfigured, adminRest, adminRestAll, canManageConstituency, getRequester } from "@/lib/admin.server";
+import { adminConfigured, adminRest, adminRestAll, canManageConstituency, getRequester, serverError } from "@/lib/admin.server";
 
 export const dynamic = "force-dynamic";
 
@@ -12,35 +12,34 @@ function configError() {
   return NextResponse.json({ error: "Server is not configured for admin actions." }, { status: 503 });
 }
 
-// Surface the underlying Supabase/GoTrue error (this is an internal admin tool).
-function serverError(e: unknown) {
-  return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 });
-}
-
 // GET /api/callers — list callers visible to the requester.
 export async function GET(req: Request) {
   if (!adminConfigured) return configError();
-  const me = await getRequester(req);
-  if (!me || !MANAGER_ROLES.includes(me.role)) {
-    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+  try {
+    const me = await getRequester(req);
+    if (!me || !MANAGER_ROLES.includes(me.role)) {
+      return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+    }
+    const rows = await adminRestAll<any>(
+      "/rest/v1/profiles?role=eq.caller&select=user_id,full_name,is_active,constituency_id," +
+        "constituencies(name,code,region_id,regions(name,code))&order=full_name",
+    );
+    const callers = (rows ?? [])
+      .filter((r) =>
+        canManageConstituency(me, r.constituencies?.region_id ?? null, r.constituency_id ?? null),
+      )
+      .map((r) => ({
+        userId: r.user_id,
+        fullName: r.full_name,
+        isActive: r.is_active,
+        constituency: r.constituencies?.name ?? null,
+        region: r.constituencies?.regions?.name ?? null,
+        constituencyCode: r.constituencies?.code ?? null,
+      }));
+    return NextResponse.json({ callers });
+  } catch (e) {
+    return serverError(e);
   }
-  const rows = await adminRestAll<any>(
-    "/rest/v1/profiles?role=eq.caller&select=user_id,full_name,is_active,constituency_id," +
-      "constituencies(name,code,region_id,regions(name,code))&order=full_name",
-  );
-  const callers = (rows ?? [])
-    .filter((r) =>
-      canManageConstituency(me, r.constituencies?.region_id ?? null, r.constituency_id ?? null),
-    )
-    .map((r) => ({
-      userId: r.user_id,
-      fullName: r.full_name,
-      isActive: r.is_active,
-      constituency: r.constituencies?.name ?? null,
-      region: r.constituencies?.regions?.name ?? null,
-      constituencyCode: r.constituencies?.code ?? null,
-    }));
-  return NextResponse.json({ callers });
 }
 
 // PATCH /api/callers — rename a caller and/or reassign their constituency.
@@ -52,7 +51,7 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: "Not authorized." }, { status: 403 });
     }
     const body = (await req.json().catch(() => null)) as
-      | { userId?: string; fullName?: string; constituencyCode?: string }
+      | { userId?: string; fullName?: string; constituencyCode?: string; isActive?: boolean }
       | null;
     if (!body?.userId) return NextResponse.json({ error: "userId is required." }, { status: 400 });
 
@@ -67,6 +66,7 @@ export async function PATCH(req: Request) {
     }
 
     const patch: Record<string, unknown> = {};
+    if (body.isActive !== undefined) patch.is_active = body.isActive;
     if (body.fullName) patch.full_name = body.fullName.trim();
     if (body.constituencyCode) {
       const cons = await adminRest<any[]>(
@@ -156,25 +156,29 @@ export async function POST(req: Request) {
 // DELETE /api/callers?id=<userId> — deactivate a caller (soft).
 export async function DELETE(req: Request) {
   if (!adminConfigured) return configError();
-  const me = await getRequester(req);
-  if (!me || !MANAGER_ROLES.includes(me.role)) {
-    return NextResponse.json({ error: "Not authorized." }, { status: 403 });
-  }
-  const id = new URL(req.url).searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
+  try {
+    const me = await getRequester(req);
+    if (!me || !MANAGER_ROLES.includes(me.role)) {
+      return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+    }
+    const id = new URL(req.url).searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id is required." }, { status: 400 });
 
-  const rows = await adminRest<any[]>(
-    `/rest/v1/profiles?user_id=eq.${id}&select=constituency_id,constituencies(region_id)`,
-  );
-  const p = rows?.[0];
-  if (!p) return NextResponse.json({ error: "Caller not found." }, { status: 404 });
-  if (!canManageConstituency(me, p.constituencies?.region_id ?? null, p.constituency_id ?? null)) {
-    return NextResponse.json({ error: "Not in your scope." }, { status: 403 });
+    const rows = await adminRest<any[]>(
+      `/rest/v1/profiles?user_id=eq.${id}&select=constituency_id,constituencies(region_id)`,
+    );
+    const p = rows?.[0];
+    if (!p) return NextResponse.json({ error: "Caller not found." }, { status: 404 });
+    if (!canManageConstituency(me, p.constituencies?.region_id ?? null, p.constituency_id ?? null)) {
+      return NextResponse.json({ error: "Not in your scope." }, { status: 403 });
+    }
+    await adminRest(`/rest/v1/profiles?user_id=eq.${id}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ is_active: false }),
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return serverError(e);
   }
-  await adminRest(`/rest/v1/profiles?user_id=eq.${id}`, {
-    method: "PATCH",
-    headers: { Prefer: "return=minimal" },
-    body: JSON.stringify({ is_active: false }),
-  });
-  return NextResponse.json({ ok: true });
 }
