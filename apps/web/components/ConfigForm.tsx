@@ -22,36 +22,64 @@ const DEFAULTS: Config = {
   thresholds: { stronghold: 0.65, lean: 0.55, tossup: 0.45, weak: 0.0 },
 };
 
+// Editable fields, in order. Decimal fields are 0–1; the two targets are integers.
+type FieldKey =
+  | "targetDays"
+  | "targetContacts"
+  | "w_supportive"
+  | "w_undecided"
+  | "w_not_reached"
+  | "w_opposed"
+  | "t_stronghold"
+  | "t_lean"
+  | "t_tossup";
+
+type Draft = Record<FieldKey, string>;
+
+function toDraft(c: Config): Draft {
+  return {
+    targetDays: String(c.targetDays),
+    targetContacts: String(c.targetContacts),
+    w_supportive: String(c.weights.supportive),
+    w_undecided: String(c.weights.undecided),
+    w_not_reached: String(c.weights.not_reached),
+    w_opposed: String(c.weights.opposed),
+    t_stronghold: String(c.thresholds.stronghold),
+    t_lean: String(c.thresholds.lean),
+    t_tossup: String(c.thresholds.tossup),
+  };
+}
+
+// Parse a draft string, falling back to the last-saved value when it's blank/invalid.
+function n(v: string, fallback: number): number {
+  const x = Number(v);
+  return v.trim() !== "" && Number.isFinite(x) ? x : fallback;
+}
+
 function NumberField({
   id,
   label,
   hint,
   value,
-  min,
-  max,
-  step,
   onChange,
 }: {
   id: string;
   label: string;
   hint?: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (v: number) => void;
+  value: string;
+  onChange: (v: string) => void;
 }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={id}>{label}</Label>
+      {/* type=text + inputMode=decimal so a decimal point can actually be typed
+          (controlled type=number wipes the "." mid-entry). */}
       <Input
         id={id}
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={Number.isFinite(value) ? value : ""}
-        onChange={(e) => onChange(e.target.value === "" ? NaN : Number(e.target.value))}
+        type="text"
+        inputMode="decimal"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
       />
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>
@@ -59,7 +87,8 @@ function NumberField({
 }
 
 export function ConfigForm() {
-  const [cfg, setCfg] = useState<Config>(DEFAULTS);
+  const [draft, setDraft] = useState<Draft>(toDraft(DEFAULTS));
+  const [saved, setSaved] = useState<Config>(DEFAULTS);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -75,8 +104,13 @@ export function ConfigForm() {
       try {
         const res = await fetch("/api/config", { headers: { Authorization: `Bearer ${token}` } });
         const json = await res.json().catch(() => ({}));
-        if (res.ok && json.config) setCfg({ ...DEFAULTS, ...json.config });
-        else setMsg({ ok: false, text: json.error ?? "Could not load settings." });
+        if (res.ok && json.config) {
+          const cfg = { ...DEFAULTS, ...json.config } as Config;
+          setSaved(cfg);
+          setDraft(toDraft(cfg));
+        } else {
+          setMsg({ ok: false, text: json.error ?? "Could not load settings." });
+        }
       } catch {
         setMsg({ ok: false, text: "Could not load settings." });
       } finally {
@@ -85,14 +119,30 @@ export function ConfigForm() {
     })();
   }, []);
 
-  const setW = (k: keyof Config["weights"], v: number) =>
-    setCfg((c) => ({ ...c, weights: { ...c.weights, [k]: v } }));
-  const setT = (k: keyof Config["thresholds"], v: number) =>
-    setCfg((c) => ({ ...c, thresholds: { ...c.thresholds, [k]: v } }));
+  const set = (k: FieldKey, v: string) => setDraft((d) => ({ ...d, [k]: v }));
+
+  function resolved(): Config {
+    return {
+      targetDays: n(draft.targetDays, saved.targetDays),
+      targetContacts: n(draft.targetContacts, saved.targetContacts),
+      weights: {
+        supportive: n(draft.w_supportive, saved.weights.supportive),
+        undecided: n(draft.w_undecided, saved.weights.undecided),
+        not_reached: n(draft.w_not_reached, saved.weights.not_reached),
+        opposed: n(draft.w_opposed, saved.weights.opposed),
+      },
+      thresholds: {
+        stronghold: n(draft.t_stronghold, saved.thresholds.stronghold),
+        lean: n(draft.t_lean, saved.thresholds.lean),
+        tossup: n(draft.t_tossup, saved.thresholds.tossup),
+        weak: 0,
+      },
+    };
+  }
 
   async function save() {
     setMsg(null);
-    // Thresholds should descend so bands don't overlap.
+    const cfg = resolved();
     const { stronghold, lean, tossup } = cfg.thresholds;
     if (!(stronghold >= lean && lean >= tossup)) {
       setMsg({ ok: false, text: "Thresholds must descend: Stronghold ≥ Lean ≥ Tossup." });
@@ -114,7 +164,9 @@ export function ConfigForm() {
       if (!res.ok) {
         setMsg({ ok: false, text: json.error ?? "Could not save settings." });
       } else {
-        if (json.config) setCfg({ ...DEFAULTS, ...json.config });
+        const next = (json.config ? { ...DEFAULTS, ...json.config } : cfg) as Config;
+        setSaved(next);
+        setDraft(toDraft(next));
         setMsg({ ok: true, text: "Saved. New values apply across the dashboard." });
       }
     } catch (e) {
@@ -122,6 +174,12 @@ export function ConfigForm() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function reset() {
+    setSaved(DEFAULTS);
+    setDraft(toDraft(DEFAULTS));
+    setMsg(null);
   }
 
   if (loading) {
@@ -143,22 +201,16 @@ export function ConfigForm() {
           <NumberField
             id="targetDays"
             label="Days left in calling window"
-            hint="Used to compute the required reach per day."
-            value={cfg.targetDays}
-            min={1}
-            max={365}
-            step={1}
-            onChange={(v) => setCfg((c) => ({ ...c, targetDays: v }))}
+            hint="Used to compute the required reach per day (1–365)."
+            value={draft.targetDays}
+            onChange={(v) => set("targetDays", v)}
           />
           <NumberField
             id="targetContacts"
             label="Target contacts per constituency"
             hint="The per-constituency contact goal."
-            value={cfg.targetContacts}
-            min={1}
-            max={100000}
-            step={1}
-            onChange={(v) => setCfg((c) => ({ ...c, targetContacts: v }))}
+            value={draft.targetContacts}
+            onChange={(v) => set("targetContacts", v)}
           />
         </div>
       </Card>
@@ -169,22 +221,22 @@ export function ConfigForm() {
           How each response counts toward a constituency&apos;s projected support share (0–1).
         </p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <NumberField id="w-sup" label="Supportive" value={cfg.weights.supportive} min={0} max={1} step={0.05} onChange={(v) => setW("supportive", v)} />
-          <NumberField id="w-und" label="Undecided" value={cfg.weights.undecided} min={0} max={1} step={0.05} onChange={(v) => setW("undecided", v)} />
-          <NumberField id="w-nr" label="Not reached" value={cfg.weights.not_reached} min={0} max={1} step={0.05} onChange={(v) => setW("not_reached", v)} />
-          <NumberField id="w-opp" label="Opposed" value={cfg.weights.opposed} min={0} max={1} step={0.05} onChange={(v) => setW("opposed", v)} />
+          <NumberField id="w-sup" label="Supportive" value={draft.w_supportive} onChange={(v) => set("w_supportive", v)} />
+          <NumberField id="w-und" label="Undecided" value={draft.w_undecided} onChange={(v) => set("w_undecided", v)} />
+          <NumberField id="w-nr" label="Not reached" value={draft.w_not_reached} onChange={(v) => set("w_not_reached", v)} />
+          <NumberField id="w-opp" label="Opposed" value={draft.w_opposed} onChange={(v) => set("w_opposed", v)} />
         </div>
       </Card>
 
       <Card>
         <h2 className="font-semibold text-foreground">Classification thresholds</h2>
         <p className="mb-4 text-sm text-muted-foreground">
-          Minimum projected share for each band (must descend). Below Tossup is Weak.
+          Minimum projected share for each band, 0–1 (must descend). Below Tossup is Weak.
         </p>
         <div className="grid gap-4 sm:grid-cols-3">
-          <NumberField id="t-strong" label="Stronghold ≥" value={cfg.thresholds.stronghold} min={0} max={1} step={0.05} onChange={(v) => setT("stronghold", v)} />
-          <NumberField id="t-lean" label="Lean ≥" value={cfg.thresholds.lean} min={0} max={1} step={0.05} onChange={(v) => setT("lean", v)} />
-          <NumberField id="t-toss" label="Tossup ≥" value={cfg.thresholds.tossup} min={0} max={1} step={0.05} onChange={(v) => setT("tossup", v)} />
+          <NumberField id="t-strong" label="Stronghold ≥" value={draft.t_stronghold} onChange={(v) => set("t_stronghold", v)} />
+          <NumberField id="t-lean" label="Lean ≥" value={draft.t_lean} onChange={(v) => set("t_lean", v)} />
+          <NumberField id="t-toss" label="Tossup ≥" value={draft.t_tossup} onChange={(v) => set("t_tossup", v)} />
         </div>
       </Card>
 
@@ -203,7 +255,7 @@ export function ConfigForm() {
         <Button onClick={save} disabled={busy}>
           {busy ? <><Loader2 className="animate-spin" /> Saving…</> : <><Save /> Save settings</>}
         </Button>
-        <Button variant="outline" onClick={() => setCfg(DEFAULTS)} disabled={busy}>
+        <Button variant="outline" onClick={reset} disabled={busy}>
           <RotateCcw /> Reset to defaults
         </Button>
       </div>
