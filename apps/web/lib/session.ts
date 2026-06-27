@@ -37,4 +37,5 @@ export function setSession(p: DemoPersona): void {
 export function clearSession(): void {
   window.localStorage.removeItem(KEY);
   document.cookie = "gg_scope=; path=/; max-age=0; samesite=lax";
+  document.cookie = "gg_token=; path=/; max-age=0; samesite=lax";
 }

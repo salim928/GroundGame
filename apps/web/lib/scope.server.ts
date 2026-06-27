@@ -7,6 +7,8 @@
 import { cookies } from "next/headers";
 import type { Role } from "./types";
 import { REAL_HIERARCHY } from "./hierarchy";
+import { adminConfigured } from "./admin.server";
+import { getServerSession } from "./auth.server";
 
 export interface ViewerScope {
   role: Role;
@@ -17,6 +19,14 @@ export interface ViewerScope {
 const FULL: ViewerScope = { role: "super_admin", regionCode: null, conCode: null };
 
 export async function getViewerScope(): Promise<ViewerScope> {
+  // When Supabase is configured, scope is derived from the verified session — not
+  // the client cookie — so a coordinator can't widen their own scope by editing it.
+  if (adminConfigured) {
+    const session = await getServerSession();
+    if (session) return { role: session.role, regionCode: session.regionCode, conCode: session.conCode };
+    return { role: "analyst", regionCode: null, conCode: null }; // no session → most-restrictive read
+  }
+  // Local/unconfigured fallback: the gitignored-file dev path uses the cookie.
   try {
     const raw = (await cookies()).get("gg_scope")?.value;
     if (!raw) return FULL;

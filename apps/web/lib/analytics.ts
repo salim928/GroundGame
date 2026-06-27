@@ -52,11 +52,11 @@ export function classify(share: number): Classification {
 }
 
 export function pct(n: number): string {
-  return `${Math.round(n * 100)}%`;
+  return Number.isFinite(n) ? `${Math.round(n * 100)}%` : "0%";
 }
 
 export function fmt(n: number): string {
-  return n.toLocaleString("en-US");
+  return Number.isFinite(n) ? n.toLocaleString("en-US") : "0";
 }
 
 export function addSpines(a: Spine, b: Spine): Spine {

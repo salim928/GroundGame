@@ -104,6 +104,9 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
       regionCode: regionCode ?? null,
       conCode: conCode ?? null,
     });
+    // The server-side auth/scope gate verifies this token from the cookie.
+    const token = data.session?.access_token;
+    if (token) document.cookie = `gg_token=${token}; path=/; max-age=86400; samesite=lax`;
     router.push(ROLE_HOME[role]);
   }
 
