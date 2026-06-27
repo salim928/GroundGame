@@ -1,16 +1,18 @@
 "use client";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 // Browser Supabase client (anon key only — never the service role; Section 14).
-// Returns null when not configured so the app can fall back to the demo session.
+// Uses @supabase/ssr so the session lives in cookies the server can read and the
+// middleware can refresh — no manual token handling. Null when not configured.
 let client: SupabaseClient | null | undefined;
 
 export function getSupabase(): SupabaseClient | null {
   if (client !== undefined) return client;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  client = url && anon ? createClient(url, anon) : null;
+  client = url && anon ? createBrowserClient(url, anon) : null;
   return client;
 }
 

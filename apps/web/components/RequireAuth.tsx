@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { getSession } from "@/lib/session";
-import { getAccessToken } from "@/lib/supabase";
 import { canAccess, ROLE_HOME } from "@/lib/access";
 
 /**
@@ -22,10 +21,6 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
       return;
     }
     if (!canAccess(session.role, pathname)) router.replace(ROLE_HOME[session.role]);
-    // Keep the server-side auth cookie fresh as Supabase rotates the access token.
-    getAccessToken().then((token) => {
-      if (token) document.cookie = `gg_token=${token}; path=/; max-age=86400; samesite=lax`;
-    });
   }, [router, pathname]);
 
   return <>{children}</>;

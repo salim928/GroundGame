@@ -1,17 +1,12 @@
-// Server-side session verification. The browser stores the Supabase access token
-// in the `gg_token` cookie; here we verify it with Supabase and resolve the
-// user's role + scope from their profile (service role). This is the real
-// server-side gate for the dashboard — RLS protects PII at the DB, but the
-// dashboard reads via the service role, so pages must be gated here too.
-//
-// cache() dedupes the work across a single request (layout + scope + pages).
-import { cookies } from "next/headers";
+// Server-side session verification (cookie-based via @supabase/ssr). Reads the
+// session from cookies, then resolves the user's role + scope from their profile
+// (service role). This is the real server-side gate for the dashboard — RLS
+// protects PII at the DB, but the dashboard reads via the service role, so pages
+// must be gated here too. cache() dedupes the work across a single request.
 import { cache } from "react";
 import type { Role } from "./types";
 import { adminConfigured, adminRest } from "./admin.server";
-
-const SB_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
-const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+import { getServerSupabase } from "./supabase-server";
 
 export interface ServerSession {
   userId: string;
@@ -23,16 +18,13 @@ export interface ServerSession {
 }
 
 export const getServerSession = cache(async (): Promise<ServerSession | null> => {
-  if (!adminConfigured || !SB_URL || !ANON) return null;
+  if (!adminConfigured) return null;
   try {
-    const token = (await cookies()).get("gg_token")?.value;
-    if (!token) return null;
-    const res = await fetch(`${SB_URL}/auth/v1/user`, {
-      headers: { apikey: ANON, Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const user = (await res.json()) as { id?: string };
+    const supabase = await getServerSupabase();
+    if (!supabase) return null;
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user?.id) return null;
     const rows = await adminRest<any[]>(
       `/rest/v1/profiles?user_id=eq.${user.id}&select=role,full_name,is_active,regions(code),constituencies(code)`,

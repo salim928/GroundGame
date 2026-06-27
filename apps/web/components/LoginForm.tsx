@@ -104,10 +104,10 @@ export function LoginForm({ expectedRole }: { expectedRole?: Role }) {
       regionCode: regionCode ?? null,
       conCode: conCode ?? null,
     });
-    // The server-side auth/scope gate verifies this token from the cookie.
-    const token = data.session?.access_token;
-    if (token) document.cookie = `gg_token=${token}; path=/; max-age=86400; samesite=lax`;
+    // @supabase/ssr stored the session in cookies during signInWithPassword;
+    // the server gate reads it. Full navigation so the server sees the new session.
     router.push(ROLE_HOME[role]);
+    router.refresh();
   }
 
   const heading = expectedRole ? `${ROLE_LABEL[expectedRole]} sign-in` : "Sign in";
