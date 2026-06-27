@@ -16,6 +16,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (adminConfigured) {
     const session = await getServerSession();
     if (!session || !session.isActive) redirect("/login");
+    if (session.role === "caller") redirect("/caller"); // callers never see staff pages
   }
 
   return (

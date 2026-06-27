@@ -32,7 +32,8 @@ export function FunnelBars({ data }: { data: FunnelStage[] }) {
     <div className="space-y-3">
       {data.map((s, i) => {
         const w = (s.value / max) * 100;
-        const conv = i === 0 ? 100 : Math.round((s.value / data[i - 1].value) * 100);
+        const prev = data[i - 1]?.value ?? 0;
+        const conv = i === 0 ? 100 : prev > 0 ? Math.round((s.value / prev) * 100) : 0;
         return (
           <div key={s.stage}>
             <div className="mb-1 flex items-center justify-between text-sm">
