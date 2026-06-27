@@ -23,7 +23,11 @@ export async function adminRest<T = any>(path: string, init?: RequestInit): Prom
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`${path} ${res.status}: ${await res.text()}`);
-  return (res.status === 204 ? null : await res.json()) as T;
+  // Empty body (204 No Content, or 201 Created from a return=minimal upsert) →
+  // null. Don't blindly call res.json() or it throws "Unexpected end of JSON input".
+  if (res.status === 204) return null as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 /** Paginated GET that pages past PostgREST's 1000-row cap. The path must already
