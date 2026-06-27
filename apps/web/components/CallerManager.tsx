@@ -18,6 +18,7 @@ interface CallerRow {
   isActive: boolean;
   constituency: string | null;
   region: string | null;
+  constituencyCode: string | null;
 }
 
 const MANAGER_ROLES = ["super_admin", "regional_coordinator", "constituency_coordinator"];
@@ -35,6 +36,7 @@ export function CallerManager() {
   const [callers, setCallers] = useState<CallerRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<{ email: string; password: string; constituency: string } | null>(null);
@@ -92,28 +94,63 @@ export function CallerManager() {
     refresh();
   }, []);
 
+  function startEdit(c: CallerRow) {
+    setCreated(null);
+    setError("");
+    setEditId(c.userId);
+    setFullName(c.fullName);
+    if (c.constituencyCode && !lockCon) {
+      const reg = REAL_HIERARCHY.find((r) => r.constituencies.some((x) => x.code === c.constituencyCode));
+      if (reg) {
+        if (!lockRegion) setRegionCode(reg.code);
+        setConCode(c.constituencyCode);
+      }
+    }
+    setOpen(true);
+  }
+
+  function closeForm() {
+    setOpen(false);
+    setEditId(null);
+    setFullName("");
+    setEmail("");
+    setError("");
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!fullName.trim() || !email.trim()) return;
+    if (!fullName.trim() || (!editId && !email.trim())) return;
     setBusy(true);
-    const password = makePassword();
     const token = await getAccessToken();
     try {
-      const res = await fetch("/api/callers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-        body: JSON.stringify({ fullName: fullName.trim(), email: email.trim(), password, constituencyCode: conCode }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(json.error ?? "Could not create the caller.");
+      if (editId) {
+        const res = await fetch("/api/callers", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+          body: JSON.stringify({ userId: editId, fullName: fullName.trim(), constituencyCode: conCode }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) setError(json.error ?? "Could not update the caller.");
+        else {
+          closeForm();
+          refresh();
+        }
       } else {
-        setCreated({ email: email.trim(), password, constituency: json.constituency ?? region.name });
-        setFullName("");
-        setEmail("");
-        setOpen(false);
-        refresh();
+        const password = makePassword();
+        const res = await fetch("/api/callers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+          body: JSON.stringify({ fullName: fullName.trim(), email: email.trim(), password, constituencyCode: conCode }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setError(json.error ?? "Could not create the caller.");
+        } else {
+          setCreated({ email: email.trim(), password, constituency: json.constituency ?? region.name });
+          closeForm();
+          refresh();
+        }
       }
     } catch {
       setError("Network error — try again.");
@@ -140,7 +177,7 @@ export function CallerManager() {
             Each caller signs in to a console limited to the one constituency you assign.
           </p>
         </div>
-        <Button onClick={() => { setOpen((v) => !v); setCreated(null); }}>
+        <Button onClick={() => { if (open) { closeForm(); } else { setCreated(null); setEditId(null); setFullName(""); setEmail(""); setOpen(true); } }}>
           {open ? <X /> : <UserPlus />}
           {open ? "Cancel" : "Add caller"}
         </Button>
@@ -174,10 +211,12 @@ export function CallerManager() {
             <Label htmlFor="cf-name">Full name</Label>
             <Input id="cf-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Kojo Mensah" />
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cf-email">Email (their login)</Label>
-            <Input id="cf-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="caller@groundgame.gh" />
-          </div>
+          {!editId && (
+            <div className="space-y-1.5">
+              <Label htmlFor="cf-email">Email (their login)</Label>
+              <Input id="cf-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="caller@groundgame.gh" />
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="cf-region">Region</Label>
             <select
@@ -212,9 +251,11 @@ export function CallerManager() {
           </div>
           {error && <p className="text-sm text-rose-600 sm:col-span-2">{error}</p>}
           <div className="flex items-center justify-between gap-3 sm:col-span-2">
-            <p className="text-xs text-muted-foreground">A secure password is generated and shown once after you create.</p>
+            <p className="text-xs text-muted-foreground">
+              {editId ? "Reassigning moves this caller's console to the new constituency." : "A secure password is generated and shown once after you create."}
+            </p>
             <Button type="submit" disabled={busy}>
-              {busy ? <><Loader2 className="animate-spin" /> Creating…</> : "Create caller"}
+              {busy ? <><Loader2 className="animate-spin" /> {editId ? "Saving…" : "Creating…"}</> : editId ? "Save changes" : "Create caller"}
             </Button>
           </div>
         </form>
@@ -247,11 +288,16 @@ export function CallerManager() {
                   {c.isActive ? <Badge variant="green">Active</Badge> : <Badge variant="secondary">Inactive</Badge>}
                 </TableCell>
                 <TableCell className="text-right">
-                  {c.isActive && (
-                    <Button variant="ghost" size="sm" onClick={() => deactivate(c.userId)}>
-                      Deactivate
+                  <div className="flex justify-end gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => startEdit(c)}>
+                      Reassign
                     </Button>
-                  )}
+                    {c.isActive && (
+                      <Button variant="ghost" size="sm" onClick={() => deactivate(c.userId)}>
+                        Deactivate
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

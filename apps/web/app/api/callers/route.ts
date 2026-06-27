@@ -38,8 +38,57 @@ export async function GET(req: Request) {
       isActive: r.is_active,
       constituency: r.constituencies?.name ?? null,
       region: r.constituencies?.regions?.name ?? null,
+      constituencyCode: r.constituencies?.code ?? null,
     }));
   return NextResponse.json({ callers });
+}
+
+// PATCH /api/callers — rename a caller and/or reassign their constituency.
+export async function PATCH(req: Request) {
+  if (!adminConfigured) return configError();
+  try {
+    const me = await getRequester(req);
+    if (!me || !MANAGER_ROLES.includes(me.role)) {
+      return NextResponse.json({ error: "Not authorized." }, { status: 403 });
+    }
+    const body = (await req.json().catch(() => null)) as
+      | { userId?: string; fullName?: string; constituencyCode?: string }
+      | null;
+    if (!body?.userId) return NextResponse.json({ error: "userId is required." }, { status: 400 });
+
+    // The caller's current constituency must be in the requester's scope.
+    const rows = await adminRest<any[]>(
+      `/rest/v1/profiles?user_id=eq.${body.userId}&role=eq.caller&select=constituency_id,constituencies(region_id)`,
+    );
+    const cur = rows?.[0];
+    if (!cur) return NextResponse.json({ error: "Caller not found." }, { status: 404 });
+    if (!canManageConstituency(me, cur.constituencies?.region_id ?? null, cur.constituency_id ?? null)) {
+      return NextResponse.json({ error: "This caller isn't in your scope." }, { status: 403 });
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (body.fullName) patch.full_name = body.fullName.trim();
+    if (body.constituencyCode) {
+      const cons = await adminRest<any[]>(
+        `/rest/v1/constituencies?code=eq.${encodeURIComponent(body.constituencyCode)}&select=id,region_id`,
+      );
+      const con = cons?.[0];
+      if (!con) return NextResponse.json({ error: "Unknown constituency." }, { status: 400 });
+      if (!canManageConstituency(me, con.region_id, con.id)) {
+        return NextResponse.json({ error: "You can't assign to that constituency." }, { status: 403 });
+      }
+      patch.region_id = con.region_id;
+      patch.constituency_id = con.id;
+    }
+    await adminRest(`/rest/v1/profiles?user_id=eq.${body.userId}`, {
+      method: "PATCH",
+      headers: { Prefer: "return=minimal" },
+      body: JSON.stringify(patch),
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    return serverError(e);
+  }
 }
 
 // POST /api/callers — create a caller login and assign a constituency.

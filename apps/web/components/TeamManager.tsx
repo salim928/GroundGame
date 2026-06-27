@@ -40,6 +40,7 @@ export function TeamManager() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
@@ -74,31 +75,78 @@ export function TeamManager() {
     refresh();
   }, []);
 
+  function resetForm() {
+    setOpen(false);
+    setEditId(null);
+    setFullName("");
+    setEmail("");
+    setError("");
+  }
+
+  function openCreate() {
+    setCreated(null);
+    setError("");
+    setEditId(null);
+    setFullName("");
+    setEmail("");
+    setRole("constituency_coordinator");
+    setRegionCode(REAL_HIERARCHY[0].code);
+    setConCode(REAL_HIERARCHY[0].constituencies[0].code);
+    setOpen(true);
+  }
+
+  function startEdit(m: Member) {
+    setCreated(null);
+    setError("");
+    setEditId(m.userId);
+    setFullName(m.fullName);
+    setRole(m.role);
+    const rCode =
+      m.regionCode ??
+      (m.conCode ? REAL_HIERARCHY.find((r) => r.constituencies.some((c) => c.code === m.conCode))?.code : null) ??
+      REAL_HIERARCHY[0].code;
+    setRegionCode(rCode);
+    const r = REAL_HIERARCHY.find((x) => x.code === rCode)!;
+    setConCode(m.conCode ?? r.constituencies[0].code);
+    setOpen(true);
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
-    if (!fullName.trim() || !email.trim()) return;
+    if (!fullName.trim() || (!editId && !email.trim())) return;
     setBusy(true);
-    const password = makePassword();
     const token = await getAccessToken();
-    const payload: Record<string, string> = { fullName: fullName.trim(), email: email.trim(), password, role };
-    if (needsRegion) payload.regionCode = regionCode;
-    if (needsConstituency) payload.constituencyCode = conCode;
+    const scopePayload: Record<string, string> = {};
+    if (needsRegion) scopePayload.regionCode = regionCode;
+    if (needsConstituency) scopePayload.constituencyCode = conCode;
     try {
-      const res = await fetch("/api/members", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(json.error ?? "Could not create member.");
+      if (editId) {
+        const res = await fetch("/api/members", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+          body: JSON.stringify({ userId: editId, fullName: fullName.trim(), role, ...scopePayload }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) setError(json.error ?? "Could not update member.");
+        else {
+          resetForm();
+          refresh();
+        }
       } else {
-        setCreated({ email: email.trim(), password });
-        setFullName("");
-        setEmail("");
-        setOpen(false);
-        refresh();
+        const password = makePassword();
+        const res = await fetch("/api/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}` },
+          body: JSON.stringify({ fullName: fullName.trim(), email: email.trim(), password, role, ...scopePayload }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) setError(json.error ?? "Could not create member.");
+        else {
+          setCreated({ email: email.trim(), password });
+          resetForm();
+          refresh();
+        }
       }
     } catch {
       setError("Network error — try again.");
@@ -115,7 +163,7 @@ export function TeamManager() {
   return (
     <>
       <div className="mb-4 flex justify-end">
-        <Button onClick={() => { setOpen((v) => !v); setCreated(null); }}>
+        <Button onClick={() => (open ? resetForm() : openCreate())}>
           {open ? <X /> : <UserPlus />}
           {open ? "Cancel" : "Create member"}
         </Button>
@@ -145,16 +193,20 @@ export function TeamManager() {
 
       {open && (
         <Card className="mb-4">
-          <h2 className="mb-4 font-semibold text-foreground">Create member &amp; assign scope</h2>
+          <h2 className="mb-4 font-semibold text-foreground">
+            {editId ? "Edit member & reassign scope" : "Create member & assign scope"}
+          </h2>
           <form onSubmit={submit} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="fn">Full name</Label>
               <Input id="fn" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="e.g. Ama Mensah" />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="em">Email</Label>
-              <Input id="em" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@groundgame.gh" />
-            </div>
+            {!editId && (
+              <div className="space-y-1.5">
+                <Label htmlFor="em">Email</Label>
+                <Input id="em" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@groundgame.gh" />
+              </div>
+            )}
             <div className="space-y-1.5">
               <Label htmlFor="role">Role</Label>
               <select
@@ -207,9 +259,11 @@ export function TeamManager() {
 
             {error && <p className="text-sm text-rose-600 sm:col-span-2">{error}</p>}
             <div className="flex items-center justify-between gap-3 sm:col-span-2">
-              <p className="text-xs text-muted-foreground">A secure password is generated and shown once after you create.</p>
+              <p className="text-xs text-muted-foreground">
+                {editId ? "Role and scope changes apply on the member's next page load." : "A secure password is generated and shown once after you create."}
+              </p>
               <Button type="submit" disabled={busy}>
-                {busy ? <><Loader2 className="animate-spin" /> Creating…</> : "Create & assign"}
+                {busy ? <><Loader2 className="animate-spin" /> {editId ? "Saving…" : "Creating…"}</> : editId ? "Save changes" : "Create & assign"}
               </Button>
             </div>
           </form>
@@ -242,11 +296,16 @@ export function TeamManager() {
                     {m.isActive ? <Badge variant="green">Active</Badge> : <Badge variant="secondary">Inactive</Badge>}
                   </TableCell>
                   <TableCell className="text-right">
-                    {m.isActive && m.role !== "super_admin" && (
-                      <Button variant="ghost" size="sm" onClick={() => deactivate(m.userId)}>
-                        Deactivate
+                    <div className="flex justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => startEdit(m)}>
+                        Edit
                       </Button>
-                    )}
+                      {m.isActive && m.role !== "super_admin" && (
+                        <Button variant="ghost" size="sm" onClick={() => deactivate(m.userId)}>
+                          Deactivate
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

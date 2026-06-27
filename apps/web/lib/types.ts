@@ -198,6 +198,8 @@ export interface Member {
   scope: string;
   email: string;
   isActive: boolean;
+  regionCode?: string | null;
+  conCode?: string | null;
 }
 
 export interface FunnelStage {
